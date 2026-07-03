@@ -1,6 +1,6 @@
 # Triggers
 
-Each timer must define a unique trigger. Triggers are matched on touch-capable watches and used to quick-select the timer on the watch.
+Each timer must define a trigger. Triggers are matched on touch-capable watches and used to quick-select timers on the watch.
 
 ## Tap triggers
 
@@ -30,16 +30,14 @@ The same zone aliases apply on both sides of the swipe.
 
 ## Uniqueness
 
-Two timers cannot share the same trigger definition. The validator compares:
+Triggers do not need to be unique. Multiple timers can share the same trigger definition, which is useful when you want one gesture to rotate through a group of related timers.
 
-- trigger kind
-- source zone
-- destination zone
+When multiple timers share a trigger, Thymer loops through the matching timers each time you use that trigger.
 
-That means all of these must be unique across timers:
+That means all of these are valid:
 
-- taps from the same zone
-- swipes with the same `from` and `to`
+- multiple taps from the same zone
+- multiple swipes with the same `from` and `to`
 
 ## Invalid examples
 
