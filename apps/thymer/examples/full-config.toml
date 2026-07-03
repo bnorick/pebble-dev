@@ -1,0 +1,55 @@
+# Shared vibration presets.
+[vibration]
+pulse-delay = 200
+acknowledgement-alert-duration = 12
+superlow = 60
+low = 100
+mid = 300
+high = 500
+
+# Named timers example. The section key becomes the default display name:
+# breathing -> Breathing
+[timers.breathing]
+repeat = true
+trigger = { tap = "top" }
+on-press-up = "skip"
+on-long-press-up = "hide"
+must-acknowledge = true
+acknowledgement-alert-duration = 5  # per-timer ack alert duration is valid too
+repeat-pattern-delay = 500
+pattern = [
+  { description = "inhale", time = 4, vibrate = "superlow" },
+  { description = "hold", time = 4 },
+  { description = "exhale", time = "00:00:06.2500", vibrate = { duration = 140, delay = 80 } },
+]
+
+[timers.cool-down]
+repeat = false
+trigger = { tap = "bottom" }
+pattern = [
+  { description = "settle", time = 10 },
+  { description = "breathe out", time = 8, vibrate = "low" },
+]
+
+# focus-block -> Focus Block
+[timers.focus-block]
+repeat = 4
+trigger = { swipe = "l-to-r" }
+on-finished = { vibrate = "low-low-high" }
+pattern = [
+  { description = "focus", time = "00:25:00", vibrate = { intensity = "mid" } },
+  { description = "short break", time = 5, vibrate = [
+    { intensity = "superlow" },
+    { duration = 200, delay = 120 },
+    { intensity = "low", delay = 120 }
+  ] },
+]
+
+[timers.long-break]
+name = "Long Break"
+repeat = false
+trigger = { swipe = "c-to-b" }
+on-finished = { vibrate = [ { intensity = "low" }, { duration = 200 }, { intensity = "high" } ] }
+pattern = [
+  { description = "rest", time = "00:15:00", vibrate = { intensity = "high" } },
+]

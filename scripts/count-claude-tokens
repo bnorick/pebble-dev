@@ -1,0 +1,68 @@
+#!/usr/bin/env -S uv run --no-config --script
+
+# /// script
+# dependencies = [
+#   "anthropic",
+#   "cyclopts",
+#   "rich",
+#   "python-dotenv"
+# ]
+# requires-python = ">=3.12"
+# ///
+"""Count tokens in a CLAUDE.md file using the Anthropic token counting API."""
+
+import os
+from pathlib import Path
+
+import anthropic
+import cyclopts
+from dotenv import dotenv_values
+from rich.console import Console
+from rich.table import Table
+
+app = cyclopts.App(help="Count tokens in a file.")
+console = Console()
+
+
+@app.default
+def count_tokens(path: Path, *, model: str = "claude-opus-4-6", dotenv: Path | None = None) -> None:
+    """Count tokens in a file.
+
+    Parameters
+    ----------
+    path
+        Path to the file to count.
+    """
+    dotenv = dotenv_values(dotenv_path=dotenv)
+
+    if not path.exists():
+        console.print(f"[bold red]Error:[/] {path} not found")
+        raise SystemExit(1)
+    
+    api_key = os.getenv("ANTHROPIC_API_KEY", dotenv.get("ANTHROPIC_API_KEY"))
+    if not api_key:
+        console.print(f"[bold red]Error:[/] ANTHROPIC_API_KEY env var should be set or in a .env file (which can be specified with --dotenv if using a non-default .env path)")
+        raise SystemExit(1)
+
+    content = path.read_text(encoding="utf-8")
+
+    with console.status(f"Counting tokens in [cyan]{path}[/]..."):
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.count_tokens(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+        )
+
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    table.add_column(style="bold")
+    table.add_column(justify="right", style="cyan")
+    table.add_row("File", str(path))
+    table.add_row("Characters", f"{len(content):,}")
+    table.add_row("Bytes", f"{len(content.encode("utf8")):,}")
+    table.add_row("Tokens", f"{response.input_tokens:,}")
+
+    console.print(table)
+
+
+if __name__ == "__main__":
+    app()

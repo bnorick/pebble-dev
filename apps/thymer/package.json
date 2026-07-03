@@ -1,0 +1,113 @@
+{
+  "name": "thymer",
+  "author": "MakeAwesomeHappen",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.10"
+  },
+  "scripts": {
+    "check:example-sync": "python3 scripts/check_example_sync.py",
+    "docs:dev": "vitepress dev docs --host 127.0.0.1",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --host 127.0.0.1"
+  },
+  "pebble": {
+    "displayName": "thymer",
+    "uuid": "419f59db-a7ad-4889-900e-b44b92066252",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "capabilities": [
+      "configurable"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "REQUEST_CONFIG",
+      "CFG_OP",
+      "CFG_TIMER",
+      "CFG_SEGMENT",
+      "CFG_FLAGS",
+      "CFG_ITER",
+      "CFG_TRIGGER_KIND",
+      "CFG_TRIGGER_FROM",
+      "CFG_TRIGGER_TO",
+      "CFG_DURATION",
+      "CFG_TEXT",
+      "CFG_ALERT",
+      "CFG_INTENSITY",
+      "CFG_DELAY",
+      "CFG_REPEAT_PATTERN_DELAY",
+      "CFG_ERROR",
+      "CFG_UP_ACTION",
+      "CFG_UP_LONG_ACTION",
+      "CFG_UI_FLAGS",
+      "CFG_ACK_DURATION"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "MENU_ICON",
+          "file": "menu-icon.png",
+          "menuIcon": true
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_PLAY",
+          "file": "play.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_PAUSE",
+          "file": "pause.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SKIP",
+          "file": "skip.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_HIDE",
+          "file": "hide.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_MUTE",
+          "file": "mute.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SHOW",
+          "file": "show.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_RESET",
+          "file": "reset.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_BACKGROUND",
+          "file": "background.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_TIMER_BACKGROUND",
+          "file": "timer-background.png"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

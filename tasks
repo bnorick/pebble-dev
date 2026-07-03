@@ -1,0 +1,34 @@
+#!/usr/bin/env -S uvx --from=rust-just just --justfile
+
+# list all available recipes
+@default:
+    just --justfile tasks --list
+
+[no-cd]
+build app='':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble build; else uv run pebble build; fi
+
+[no-cd]
+docs-dev app='':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && npm run docs:dev; else npm run docs:dev; fi
+
+[no-cd]
+check app='':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pre-commit run --all-files; else uv run pre-commit run --all-files; fi
+
+[no-cd]
+install ip app='':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble install --phone {{ ip }}; else uv run pebble install --phone {{ ip }}; fi
+
+[no-cd]
+logs ip:
+    uv run pebble logs --phone {{ ip }}
+
+[no-cd]
+emulate:
+    uv run pebble install --emulator emery
+
+[no-cd]
+clean:
+    uv run pebble kill
+    uv run pebble wipe

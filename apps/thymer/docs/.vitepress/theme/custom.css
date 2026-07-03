@@ -1,0 +1,70 @@
+:root {
+  --vp-font-family-base: "Avenir Next", "Segoe UI", sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --vp-c-brand-1: #166534;
+  --vp-c-brand-2: #15803d;
+  --vp-c-brand-3: #14532d;
+  --vp-c-brand-soft: rgba(22, 101, 52, 0.14);
+  --vp-c-bg: #f6f4ec;
+  --vp-c-bg-alt: #efe9da;
+  --vp-c-bg-soft: #f1ecdf;
+  --vp-c-divider: rgba(45, 55, 72, 0.14);
+  --vp-c-text-1: #1f2937;
+  --vp-c-text-2: #475569;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #14532d 10%, #0f766e 90%);
+  --vp-home-hero-image-background-image: radial-gradient(circle at top, rgba(21, 128, 61, 0.25), rgba(15, 118, 110, 0.08) 55%, transparent 75%);
+  --vp-home-hero-image-filter: blur(52px);
+  --vp-button-brand-bg: #166534;
+  --vp-button-brand-hover-bg: #14532d;
+  --vp-button-brand-active-bg: #14532d;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1rem;
+  width: min(22vw, 220px);
+  height: min(22vw, 220px);
+  background: url("/accent-thymer.png") no-repeat center / contain;
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.VPNavBarTitle .logo {
+  width: auto;
+  height: 34px;
+  max-width: 180px;
+}
+
+.vp-doc div[class*="language-"] {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+}
+
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc a {
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  body::after {
+    width: min(32vw, 160px);
+    height: min(32vw, 160px);
+    right: 0.75rem;
+    bottom: 0.75rem;
+    opacity: 0.1;
+  }
+
+  .VPNavBarTitle .logo {
+    height: 30px;
+    max-width: 150px;
+  }
+}

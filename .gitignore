@@ -1,0 +1,30 @@
+annex/
+.env*
+.cache/
+.agents/
+.codex/
+
+# local config
+mise.local.toml
+
+# vitepress
+**/.vitepress/cache/
+**/.vitepress/dist/
+
+# Pebble emulator lock files
+.lock-waf_*
+.wafpickle-*
+
+# JS dependencies — regenerate with `npm install`
+node_modules/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
