@@ -27,7 +27,7 @@ Optional shared vibration settings:
 - overrides built-in named levels such as `low`, `mid`, and `high`
 - can define extra named levels such as `superlow`
 - can set `pulse-delay`
-- can set `acknowledgement-alert-duration`
+- can set `acknowledgment-alert-duration`
 
 ### `[timers.<name>]`
 

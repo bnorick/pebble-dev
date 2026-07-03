@@ -62,6 +62,7 @@ export default defineConfig({
           { text: "Breathing", link: "/cookbook/breathing" },
           { text: "Exercise", link: "/cookbook/exercise" },
           { text: "Kids", link: "/cookbook/kids" },
+          { text: "My Config", link: "/cookbook/my-config" },
           { text: "Full Config", link: "/cookbook/full-config" },
         ],
       },

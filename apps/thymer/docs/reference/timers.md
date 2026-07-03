@@ -68,10 +68,6 @@ Any segment with its own `vibrate` value overrides this default.
 Optional finish vibration. Both of these are valid:
 
 ```toml
-on-finished = "low-low-high"
-```
-
-```toml
 on-finished = { vibrate = "low-low-high" }
 ```
 
@@ -103,14 +99,6 @@ Delay in milliseconds inserted before the next repetition starts. Defaults to `5
 repeat-pattern-delay = 500
 ```
 
-### `acknowledgement-alert-duration`
+### `acknowledgment-alert-duration`
 
 Per-timer override in milliseconds for acknowledgement reminder vibration duration. Defaults to the root `[vibration]` value, or `12` when that table is omitted.
-
-Accepted aliases:
-
-- `acknowledgement-alert-duration`
-- `acknowledgment-alert-duration`
-- `ack-alert-duration`
-
-Only set one alias per timer.

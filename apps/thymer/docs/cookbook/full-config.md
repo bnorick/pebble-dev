@@ -8,7 +8,7 @@ This page carries the current checked-in example config. Keep it in sync with `e
 # Shared vibration presets.
 [vibration]
 pulse-delay = 200
-acknowledgement-alert-duration = 12
+acknowledgment-alert-duration = 12
 superlow = 60
 low = 100
 mid = 300
@@ -22,7 +22,7 @@ trigger = { tap = "top" }
 on-press-up = "skip"
 on-long-press-up = "hide"
 must-acknowledge = true
-acknowledgement-alert-duration = 5  # per-timer ack alert duration is valid too
+acknowledgment-alert-duration = 5  # per-timer ack alert duration is valid too
 repeat-pattern-delay = 500
 vibrate = "superlow"
 pattern = [
@@ -43,7 +43,7 @@ pattern = [
 [timers.focus-block]
 repeat = 4
 trigger = { swipe = "l-to-r" }
-on-finished = "low-low-high"
+on-finished = { vibrate = "low-low-high" }
 vibrate = { intensity = "mid" }
 pattern = [
   { name = "focus", hint = "deep work", time = "00:25:00" },

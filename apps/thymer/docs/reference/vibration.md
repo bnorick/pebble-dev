@@ -9,7 +9,7 @@ Use `[vibration]` to set shared named levels and defaults.
 ```toml
 [vibration]
 pulse-delay = 200
-acknowledgement-alert-duration = 12
+acknowledgment-alert-duration = 12
 superlow = 60
 low = 100
 mid = 300
@@ -19,10 +19,8 @@ high = 500
 Supported keys:
 
 - `pulse-delay`
-- `acknowledgement-alert-duration`
+- `acknowledgment-alert-duration`
 - named levels such as `low`, `mid`, `high`, or custom names like `superlow`
-
-`medium` is normalized to `mid`.
 
 ## Simple string form
 
@@ -31,12 +29,6 @@ vibrate = "low"
 ```
 
 Uses a named vibration level and the shared default pulse delay.
-
-This same syntax also works directly on `on-finished`:
-
-```toml
-on-finished = "low-low-high"
-```
 
 ## Shorthand sequence form
 

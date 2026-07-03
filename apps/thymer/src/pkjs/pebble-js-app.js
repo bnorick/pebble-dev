@@ -285,8 +285,7 @@ function normalizeTrigger(trigger) {
 }
 
 function normalizeVibrationName(value) {
-  const normalized = String(value || "mid").trim().toLowerCase();
-  return normalized === "medium" ? "mid" : normalized;
+  return String(value || "mid").trim().toLowerCase();
 }
 
 function parseVibrationConfig(raw) {
@@ -309,9 +308,7 @@ function parseVibrationConfig(raw) {
       pulseDelay = Math.max(0, Number(raw[key]) | 0);
       continue;
     }
-    if (key === "acknowledgement-alert-duration" ||
-        key === "acknowledgment-alert-duration" ||
-        key === "ack-alert-duration") {
+    if (key === "acknowledgment-alert-duration") {
       acknowledgeAlertDuration = normalizeAckAlertDuration(raw[key], 0);
       continue;
     }
@@ -410,10 +407,10 @@ function normalizeAckAlertDuration(value, index) {
     return DEFAULT_ACK_ALERT_DURATION;
   }
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) {
-    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgement-alert-duration must be a non-negative integer`);
+    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgment-alert-duration must be a non-negative integer`);
   }
   if (value > 65535) {
-    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgement-alert-duration out of range`);
+    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgment-alert-duration out of range`);
   }
   return value;
 }
@@ -475,10 +472,13 @@ function normalizeFinishVibrate(raw, index, vibrationConfig) {
   if (raw == null) {
     return [];
   }
-  if (typeof raw === "object" && !Array.isArray(raw) && raw.vibrate != null) {
-    return normalizeVibrate(raw.vibrate, vibrationConfig);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`timer ${index + 1} on-finished must be an inline table`);
   }
-  return normalizeVibrate(raw, vibrationConfig);
+  if (raw.vibrate == null) {
+    throw new Error(`timer ${index + 1} on-finished must define vibrate`);
+  }
+  return normalizeVibrate(raw.vibrate, vibrationConfig);
 }
 
 function normalizeUpAction(raw, fieldName, index) {
@@ -515,16 +515,6 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
   if (raw["must-acknowledge"] != null && typeof raw["must-acknowledge"] !== "boolean") {
     throw new Error(`timer ${index + 1} must-acknowledge must be true or false`);
   }
-  const ackAlertDurationFields = [
-    "acknowledgement-alert-duration",
-    "acknowledgment-alert-duration",
-    "ack-alert-duration",
-  ].filter(function(field) {
-    return raw[field] != null;
-  });
-  if (ackAlertDurationFields.length > 1) {
-    throw new Error(`timer ${index + 1} acknowledgement alert duration must only be set once`);
-  }
   const onPressUp = normalizeUpAction(raw["on-press-up"], "on-press-up", index);
   const onLongPressUp = normalizeUpAction(raw["on-long-press-up"], "on-long-press-up", index);
   return {
@@ -537,7 +527,9 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     mustAcknowledge: raw["must-acknowledge"] === true,
     repeatPatternDelay: normalizeRepeatPatternDelay(raw["repeat-pattern-delay"], index),
     acknowledgeAlertDuration: normalizeAckAlertDuration(
-      ackAlertDurationFields.length ? raw[ackAlertDurationFields[0]] : vibrationConfig.acknowledgeAlertDuration,
+      raw["acknowledgment-alert-duration"] == null
+        ? vibrationConfig.acknowledgeAlertDuration
+        : raw["acknowledgment-alert-duration"],
       index
     ),
     finishVibrate: finishVibrate,
