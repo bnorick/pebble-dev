@@ -12,8 +12,8 @@ Every config needs at least one named timer section under `timers.*`.
 [timers.focus]
 trigger = { tap = "top" }
 pattern = [
-  { description = "focus", time = "00:25:00" },
-  { description = "break", time = "00:05:00", vibrate = "low" },
+  { name = "focus", time = "00:25:00" },
+  { name = "break", time = "00:05:00", vibrate = "low" },
 ]
 ```
 

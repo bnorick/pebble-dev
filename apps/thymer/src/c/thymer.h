@@ -8,8 +8,9 @@
 
 #define MAX_TIMERS 8
 #define MAX_SEGMENTS 30
-#define MAX_NAME_LEN 24
-#define MAX_DESC_LEN 24
+#define MAX_NAME_LEN 40
+#define MAX_SEGMENT_NAME_LEN 40
+#define MAX_HINT_LEN 28
 #define MAX_VIBE_STEPS 4
 #define MAX_VIBE_PATTERN_PARTS (MAX_VIBE_STEPS * 2)
 #define FINISH_VIBE_SEGMENT 255
@@ -26,7 +27,7 @@
 #define PERSIST_KEY_SEGMENT_BASE 300
 
 #define WAKEUP_COOKIE_FINISH 1
-#define CONFIG_VERSION 10
+#define CONFIG_VERSION 11
 #define BUTTON_HINT_ICON_SIZE 28
 #define BUTTON_HINT_ICON_HALF (BUTTON_HINT_ICON_SIZE / 2)
 #define BUTTON_HINT_WIDTH 30
@@ -65,6 +66,9 @@
 #endif
 #ifndef MESSAGE_KEY_CFG_ACK_DURATION
 #define MESSAGE_KEY_CFG_ACK_DURATION 10019
+#endif
+#ifndef MESSAGE_KEY_CFG_HINT
+#define MESSAGE_KEY_CFG_HINT 10020
 #endif
 
 typedef enum {
@@ -112,7 +116,8 @@ typedef struct {
 } VibeStep;
 
 typedef struct {
-  char description[MAX_DESC_LEN];
+  char name[MAX_SEGMENT_NAME_LEN];
+  char hint[MAX_HINT_LEN];
   uint64_t duration_ms;
   uint8_t vibe_count;
   VibeStep vibes[MAX_VIBE_STEPS];
@@ -166,7 +171,8 @@ typedef struct __attribute__((__packed__)) {
 } PersistTimerRecord;
 
 typedef struct __attribute__((__packed__)) {
-  char description[MAX_DESC_LEN];
+  char name[MAX_SEGMENT_NAME_LEN];
+  char hint[MAX_HINT_LEN];
   uint64_t duration_ms;
   uint8_t vibe_count;
   PersistVibeStep vibes[MAX_VIBE_STEPS];

@@ -14,7 +14,7 @@ high = 180
 [timers.focus]
 trigger = { tap = "top" }
 pattern = [
-  { description = "focus", time = "00:25:00" },
+  { name = "focus", time = "00:25:00" },
 ]
 ```
 

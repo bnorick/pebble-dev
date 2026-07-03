@@ -132,7 +132,8 @@ static bool prv_timer_segments_equal(const TimerDefinition *a, const TimerDefini
   for (uint8_t i = 0; i < a->segment_count; ++i) {
     const TimerSegment *left = &a->segments[i];
     const TimerSegment *right = &b->segments[i];
-    if (strncmp(left->description, right->description, MAX_DESC_LEN) != 0 ||
+    if (strncmp(left->name, right->name, MAX_SEGMENT_NAME_LEN) != 0 ||
+        strncmp(left->hint, right->hint, MAX_HINT_LEN) != 0 ||
         left->duration_ms != right->duration_ms ||
         left->vibe_count != right->vibe_count) {
       return false;
@@ -224,14 +225,14 @@ static bool prv_set_default_timer(TimerDefinition *timer) {
     return false;
   }
 
-  util_copy_string(timer->segments[0].description, sizeof(timer->segments[0].description), "far");
+  util_copy_string(timer->segments[0].name, sizeof(timer->segments[0].name), "far");
   timer->segments[0].duration_ms = 20000;
   timer->segments[0].vibe_count = 1;
   timer->segments[0].vibes[0].intensity = VIBE_INTENSITY_LOW;
   timer->segments[0].vibes[0].duration_ms = 100;
   timer->segments[0].vibes[0].delay_ms = 100;
 
-  util_copy_string(timer->segments[1].description, sizeof(timer->segments[1].description), "near");
+  util_copy_string(timer->segments[1].name, sizeof(timer->segments[1].name), "near");
   timer->segments[1].duration_ms = 20000;
   timer->segments[1].vibe_count = 1;
   timer->segments[1].vibes[0].intensity = VIBE_INTENSITY_MID;
@@ -352,8 +353,8 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
       }
 
       TimerSegment *segment = &timer->segments[segment_index];
-      util_copy_string(segment->description, sizeof(segment->description),
-                       segment_record.description);
+      util_copy_string(segment->name, sizeof(segment->name), segment_record.name);
+      util_copy_string(segment->hint, sizeof(segment->hint), segment_record.hint);
       segment->duration_ms = segment_record.duration_ms;
       segment->vibe_count = segment_record.vibe_count;
       for (uint8_t i = 0; i < segment->vibe_count; ++i) {
@@ -440,8 +441,8 @@ void config_persist_config(void) {
         const TimerSegment *segment = &timer->segments[segment_index];
         PersistSegmentRecord segment_record;
         memset(&segment_record, 0, sizeof(segment_record));
-        util_copy_string(segment_record.description, sizeof(segment_record.description),
-                         segment->description);
+        util_copy_string(segment_record.name, sizeof(segment_record.name), segment->name);
+        util_copy_string(segment_record.hint, sizeof(segment_record.hint), segment->hint);
         segment_record.duration_ms = segment->duration_ms;
         segment_record.vibe_count = segment->vibe_count;
         for (uint8_t i = 0; i < segment->vibe_count; ++i) {
@@ -674,6 +675,7 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *segment_tuple = dict_find(iter, MESSAGE_KEY_CFG_SEGMENT);
     Tuple *duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_DURATION);
     Tuple *text_tuple = dict_find(iter, MESSAGE_KEY_CFG_TEXT);
+    Tuple *hint_tuple = dict_find(iter, MESSAGE_KEY_CFG_HINT);
     Tuple *alert_tuple = dict_find(iter, MESSAGE_KEY_CFG_ALERT);
     if (!timer_tuple || !segment_tuple || !duration_tuple) {
       return;
@@ -696,8 +698,10 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     segment->vibe_count = alert_tuple
       ? (uint8_t)util_clamp_i32(alert_tuple->value->int32, 0, MAX_VIBE_STEPS) : 0;
     if (text_tuple && text_tuple->type == TUPLE_CSTRING) {
-      util_copy_string(segment->description, sizeof(segment->description),
-                       text_tuple->value->cstring);
+      util_copy_string(segment->name, sizeof(segment->name), text_tuple->value->cstring);
+    }
+    if (hint_tuple && hint_tuple->type == TUPLE_CSTRING) {
+      util_copy_string(segment->hint, sizeof(segment->hint), hint_tuple->value->cstring);
     }
     return;
   }
@@ -742,8 +746,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       TimerDefinition *timer = &s_pending_config.timers[timer_index];
       for (uint8_t segment_index = 0; segment_index < timer->segment_count; ++segment_index) {
         TimerSegment *segment = &timer->segments[segment_index];
-        if (!segment->description[0]) {
-          snprintf(segment->description, sizeof(segment->description), "step %u",
+        if (!segment->name[0]) {
+          snprintf(segment->name, sizeof(segment->name), "step %u",
                    (unsigned)(segment_index + 1));
         }
       }

@@ -10,6 +10,7 @@ static Window *s_window;
 static BitmapLayer *s_background_layer;
 static BitmapLayer *s_focus_panel_layer;
 static TextLayer *s_title_layer;
+static TextLayer *s_hint_layer;
 static TextLayer *s_timer_layer;
 static TextLayer *s_status_layer;
 static TextLayer *s_detail_layer;
@@ -103,11 +104,13 @@ void ui_show_config_notice(void) {
 
 void ui_apply_text_hidden(bool hidden) {
   s_text_hidden = hidden;
-  if (!s_title_layer || !s_timer_layer || !s_status_layer || !s_detail_layer || !s_footer_layer) {
+  if (!s_title_layer || !s_hint_layer || !s_timer_layer || !s_status_layer || !s_detail_layer ||
+      !s_footer_layer) {
     return;
   }
   prv_set_focus_panel_hidden(hidden);
   layer_set_hidden(text_layer_get_layer(s_title_layer), hidden);
+  layer_set_hidden(text_layer_get_layer(s_hint_layer), hidden);
   layer_set_hidden(text_layer_get_layer(s_timer_layer), hidden);
   layer_set_hidden(text_layer_get_layer(s_status_layer), hidden);
   layer_set_hidden(text_layer_get_layer(s_detail_layer), hidden);
@@ -210,6 +213,7 @@ void ui_refresh(void) {
 
   if (s_waiting_for_initial_config) {
     text_layer_set_text(s_title_layer, APP_NAME);
+    text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "");
     text_layer_set_text(s_status_layer, "Loading...");
     text_layer_set_text(s_detail_layer, "");
@@ -226,6 +230,7 @@ void ui_refresh(void) {
 
   if (s_show_config_notice) {
     text_layer_set_text(s_title_layer, APP_NAME);
+    text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "");
     text_layer_set_text(s_status_layer, "Updated");
     text_layer_set_text(s_detail_layer, "");
@@ -239,6 +244,7 @@ void ui_refresh(void) {
 
   if (!selected) {
     text_layer_set_text(s_title_layer, APP_NAME);
+    text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "--:--");
     text_layer_set_text(s_status_layer, "No timers configured");
     text_layer_set_text(s_detail_layer, "");
@@ -253,6 +259,7 @@ void ui_refresh(void) {
   if ((selected->segment_count == 0 || !selected->segments) ||
       (active && (active->segment_count == 0 || !active->segments))) {
     text_layer_set_text(s_title_layer, active ? active->name : selected->name);
+    text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "--:--");
     text_layer_set_text(s_status_layer, "Timer has no steps");
     text_layer_set_text(s_detail_layer, "");
@@ -265,6 +272,7 @@ void ui_refresh(void) {
   }
 
   const char *segment_name = "";
+  const char *segment_hint = "";
   const char *state_text = "";
 
   text_layer_set_text(s_title_layer, active ? active->name : selected->name);
@@ -285,7 +293,8 @@ void ui_refresh(void) {
       }
     }
 
-    segment_name = segment->description;
+    segment_name = segment->name;
+    segment_hint = segment->hint;
     if (s_state.awaiting_ack) {
       state_text = "Press select";
     } else if (!s_state.running && !snap.completed && !s_state.completed) {
@@ -297,11 +306,13 @@ void ui_refresh(void) {
       : 0;
     util_format_duration(selected->segments[preview_segment].duration_ms,
                          s_time_buffer, sizeof(s_time_buffer));
-    segment_name = selected->segments[preview_segment].description;
+    segment_name = selected->segments[preview_segment].name;
+    segment_hint = selected->segments[preview_segment].hint;
     s_iteration_buffer[0] = '\0';
   }
 
   text_layer_set_text(s_timer_layer, s_time_buffer);
+  text_layer_set_text(s_hint_layer, segment_hint);
   text_layer_set_text(s_status_layer, segment_name);
   text_layer_set_text(s_detail_layer, state_text);
   text_layer_set_text(s_footer_layer, s_iteration_buffer);
@@ -325,7 +336,6 @@ void ui_refresh(void) {
 static void prv_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
-  int16_t content_width = bounds.size.w - 12;
 
   if (bounds.size.w == 200 && bounds.size.h == 228) {
     s_background_bitmap = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BACKGROUND);
@@ -346,21 +356,31 @@ static void prv_window_load(Window *window) {
     layer_add_child(window_layer, bitmap_layer_get_layer(s_focus_panel_layer));
   }
 
-  s_title_layer = text_layer_create(GRect(6, 4, content_width, 28));
+  s_title_layer = text_layer_create(GRect(8, 4, bounds.size.w - 16, 40));
   text_layer_set_background_color(s_title_layer, GColorClear);
   text_layer_set_text_color(s_title_layer, GColorBlack);
   text_layer_set_font(s_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(s_title_layer, GTextOverflowModeWordWrap);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  s_status_layer = text_layer_create(GRect(8, 60, bounds.size.w - 16, 38));
+  s_hint_layer = text_layer_create(GRect(8, 42, bounds.size.w - 16, 22));
+  text_layer_set_background_color(s_hint_layer, GColorClear);
+  text_layer_set_text_color(s_hint_layer, GColorDarkGray);
+  text_layer_set_font(s_hint_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_alignment(s_hint_layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(s_hint_layer, GTextOverflowModeWordWrap);
+  layer_add_child(window_layer, text_layer_get_layer(s_hint_layer));
+
+  s_status_layer = text_layer_create(GRect(8, 60, bounds.size.w - 16, 44));
   text_layer_set_background_color(s_status_layer, GColorClear);
   text_layer_set_text_color(s_status_layer, GColorBlack);
-  text_layer_set_font(s_status_layer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
+  text_layer_set_font(s_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
   text_layer_set_text_alignment(s_status_layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(s_status_layer, GTextOverflowModeWordWrap);
   layer_add_child(window_layer, text_layer_get_layer(s_status_layer));
 
-  s_timer_layer = text_layer_create(GRect(0, 92, bounds.size.w, 44));
+  s_timer_layer = text_layer_create(GRect(0, 104, bounds.size.w, 44));
   text_layer_set_background_color(s_timer_layer, GColorClear);
   text_layer_set_text_color(s_timer_layer, GColorBlack);
   text_layer_set_font(s_timer_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
@@ -372,6 +392,7 @@ static void prv_window_load(Window *window) {
   text_layer_set_text_color(s_detail_layer, GColorDarkGray);
   text_layer_set_font(s_detail_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
   text_layer_set_text_alignment(s_detail_layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(s_detail_layer, GTextOverflowModeWordWrap);
   layer_add_child(window_layer, text_layer_get_layer(s_detail_layer));
 
   s_footer_layer = text_layer_create(GRect(8, bounds.size.h - 32, bounds.size.w - 16, 30));
@@ -379,6 +400,7 @@ static void prv_window_load(Window *window) {
   text_layer_set_text_color(s_footer_layer, GColorDarkGray);
   text_layer_set_font(s_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_footer_layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(s_footer_layer, GTextOverflowModeWordWrap);
   layer_add_child(window_layer, text_layer_get_layer(s_footer_layer));
 
   s_up_long_hint_layer = text_layer_create(
@@ -463,6 +485,7 @@ static void prv_window_unload(Window *window) {
     s_focus_panel_bitmap = NULL;
   }
   text_layer_destroy(s_title_layer);
+  text_layer_destroy(s_hint_layer);
   text_layer_destroy(s_timer_layer);
   text_layer_destroy(s_status_layer);
   text_layer_destroy(s_detail_layer);

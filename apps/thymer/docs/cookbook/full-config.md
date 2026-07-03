@@ -24,28 +24,30 @@ on-long-press-up = "hide"
 must-acknowledge = true
 acknowledgement-alert-duration = 5  # per-timer ack alert duration is valid too
 repeat-pattern-delay = 500
+vibrate = "superlow"
 pattern = [
-  { description = "inhale", time = 4, vibrate = "superlow" },
-  { description = "hold", time = 4 },
-  { description = "exhale", time = "00:00:06.2500", vibrate = { duration = 140, delay = 80 } },
+  { name = "inhale", hint = "through nose", time = 4 },
+  { name = "hold", time = 4 },
+  { name = "exhale", hint = "slow release", time = "00:00:06.2500", vibrate = { duration = 140, delay = 80 } },
 ]
 
 [timers.cool-down]
 repeat = false
 trigger = { tap = "bottom" }
 pattern = [
-  { description = "settle", time = 10 },
-  { description = "breathe out", time = 8, vibrate = "low" },
+  { name = "settle", time = 10 },
+  { name = "breathe out", time = 8, vibrate = "low" },
 ]
 
 # focus-block -> Focus Block
 [timers.focus-block]
 repeat = 4
 trigger = { swipe = "l-to-r" }
-on-finished = { vibrate = "low-low-high" }
+on-finished = "low-low-high"
+vibrate = { intensity = "mid" }
 pattern = [
-  { description = "focus", time = "00:25:00", vibrate = { intensity = "mid" } },
-  { description = "short break", time = 5, vibrate = [
+  { name = "focus", hint = "deep work", time = "00:25:00" },
+  { name = "short\nbreak", time = 5, vibrate = [
     { intensity = "superlow" },
     { duration = 200, delay = 120 },
     { intensity = "low", delay = 120 }
@@ -53,11 +55,11 @@ pattern = [
 ]
 
 [timers.long-break]
-name = "Long Break"
+name = "Long\nBreak"
 repeat = false
 trigger = { swipe = "c-to-b" }
 on-finished = { vibrate = [ { intensity = "low" }, { duration = 200 }, { intensity = "high" } ] }
 pattern = [
-  { description = "rest", time = "00:15:00", vibrate = { intensity = "high" } },
+  { name = "rest", hint = "walk away", time = "00:15:00", vibrate = { intensity = "high" } },
 ]
 ```

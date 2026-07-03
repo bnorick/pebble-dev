@@ -20,10 +20,10 @@ Square breathing is a balanced cadence that is easy to memorize and useful for q
 repeat = true
 trigger = { tap = "right" }
 pattern = [
-  { description = "in", time = "00:00:04", vibrate = "superlow" },
-  { description = "hold", time = "00:00:04", vibrate = "superlow" },
-  { description = "out", time = "00:00:04", vibrate = "superlow" },
-  { description = "hold", time = "00:00:04", vibrate = "superlow" },
+  { name = "in", time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:04", vibrate = "superlow" },
+  { name = "out", time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:04", vibrate = "superlow" },
 ]
 ```
 
@@ -40,8 +40,8 @@ repeat = true
 on-press-up = "hide"
 trigger = { tap = "right" }
 pattern = [
-  { description = "in", time = "00:00:04", vibrate = "superlow" },
-  { description = "hold", time = "00:00:07", vibrate = "superlow-superlow" },
-  { description = "out", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
+  { name = "in", time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:07", vibrate = "superlow-superlow" },
+  { name = "out", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
 ]
 ```

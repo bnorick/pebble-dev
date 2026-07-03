@@ -1,6 +1,6 @@
 {
-  "name": "thymer",
-  "author": "MakeAwesomeHappen",
+  "name": "Thymer",
+  "author": "bnorick",
   "version": "1.0.0",
   "keywords": [
     "pebble-app"
@@ -10,7 +10,7 @@
     "@rebble/clay": "^1.0.10"
   },
   "scripts": {
-    "check:example-sync": "python3 scripts/check_example_sync.py",
+    "check:example-sync": "uv run scripts/check_example_sync.py",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs --host 127.0.0.1"

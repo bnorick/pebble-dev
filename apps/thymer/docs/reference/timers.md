@@ -24,8 +24,8 @@ Required non-empty array of inline tables:
 
 ```toml
 pattern = [
-  { description = "focus", time = "00:25:00" },
-  { description = "break", time = "00:05:00", vibrate = "low" },
+  { name = "focus", time = "00:25:00" },
+  { name = "break", time = "00:05:00", vibrate = "low" },
 ]
 ```
 
@@ -53,9 +53,23 @@ repeat = 4
 
 `repeat = true` cannot be combined with `on-finished`.
 
+### `vibrate`
+
+Optional default vibration for every segment in the timer.
+
+```toml
+vibrate = "mid"
+```
+
+Any segment with its own `vibrate` value overrides this default.
+
 ### `on-finished`
 
-Optional finish vibration:
+Optional finish vibration. Both of these are valid:
+
+```toml
+on-finished = "low-low-high"
+```
 
 ```toml
 on-finished = { vibrate = "low-low-high" }

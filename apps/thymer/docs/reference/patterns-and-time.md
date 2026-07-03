@@ -4,15 +4,25 @@ Each timer `pattern` is an ordered array of inline tables. Thymer moves through 
 
 ## Segment fields
 
-### `description`
+### `name`
 
 Optional display label for the segment.
 
 ```toml
-{ description = "focus", time = "00:25:00" }
+{ name = "focus", time = "00:25:00" }
 ```
 
 If omitted, Thymer falls back to `step N`.
+
+Use `\n` for explicit line breaks when you want the watch to stack the label.
+
+### `hint`
+
+Optional smaller line shown above the segment name on the watch.
+
+```toml
+{ hint = "deep work", name = "focus", time = "00:25:00" }
+```
 
 ### `time`
 
@@ -43,6 +53,8 @@ The parser normalizes string durations to millisecond precision before transport
 ### `vibrate`
 
 Optional per-segment vibration. See [Vibration](/reference/vibration) for the accepted forms.
+
+If the parent timer defines `vibrate`, that timer-level value becomes the default for any segment that omits `vibrate`.
 
 ## Validation rules
 

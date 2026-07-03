@@ -27,6 +27,7 @@ const KEY_CFG_UP_ACTION = 10016;
 const KEY_CFG_UP_LONG_ACTION = 10017;
 const KEY_CFG_UI_FLAGS = 10018;
 const KEY_CFG_ACK_DURATION = 10019;
+const KEY_CFG_HINT = 10020;
 
 const CFG_OP_BEGIN = 1;
 const CFG_OP_TIMER = 2;
@@ -470,6 +471,16 @@ function normalizeVibrate(raw, vibrationConfig) {
   return [normalizeVibrateStep(raw, vibrationConfig)];
 }
 
+function normalizeFinishVibrate(raw, index, vibrationConfig) {
+  if (raw == null) {
+    return [];
+  }
+  if (typeof raw === "object" && !Array.isArray(raw) && raw.vibrate != null) {
+    return normalizeVibrate(raw.vibrate, vibrationConfig);
+  }
+  return normalizeVibrate(raw, vibrationConfig);
+}
+
 function normalizeUpAction(raw, fieldName, index) {
   if (raw == null) return UP_ACTION_NONE;
   if (typeof raw !== "string") {
@@ -496,10 +507,8 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
   const repeatForever = rawRepeat === true;
   const repeatCount = typeof rawRepeat === "number" ? Math.max(1, Number(rawRepeat) | 0) : 0;
   const repeat = repeatForever || repeatCount > 0;
-  const onFinished = raw["on-finished"];
-  const finishVibrate = onFinished && typeof onFinished === "object"
-    ? normalizeVibrate(onFinished.vibrate, vibrationConfig)
-    : [];
+  const finishVibrate = normalizeFinishVibrate(raw["on-finished"], index, vibrationConfig);
+  const defaultVibrate = normalizeVibrate(raw.vibrate, vibrationConfig);
   if (repeatForever && finishVibrate.length > 0) {
     throw new Error(`timer ${index + 1} cannot use on-finished with repeat = true`);
   }
@@ -537,10 +546,16 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
       if (!segment || typeof segment !== "object") {
         throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} must be inline table`);
       }
+      if (segment.description != null || segment.desc != null) {
+        throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} uses unsupported key: description`);
+      }
       return {
-        description: String(segment.description || segment.desc || `step ${segmentIndex + 1}`),
+        name: String(segment.name || `step ${segmentIndex + 1}`),
+        hint: segment.hint == null ? "" : String(segment.hint),
         durationMs: normalizeSegmentDurationMs(segment.time),
-        vibrate: normalizeVibrate(segment.vibrate, vibrationConfig),
+        vibrate: segment.vibrate != null
+          ? normalizeVibrate(segment.vibrate, vibrationConfig)
+          : defaultVibrate,
       };
     }),
   };
@@ -687,7 +702,8 @@ function sendSegmentAt(timers, timerIndex, segmentIndex) {
   payload[KEY_CFG_TIMER] = timerIndex;
   payload[KEY_CFG_SEGMENT] = segmentIndex;
   payload[KEY_CFG_DURATION] = encodeUint64Bytes(segment.durationMs);
-  payload[KEY_CFG_TEXT] = segment.description;
+  payload[KEY_CFG_TEXT] = segment.name;
+  payload[KEY_CFG_HINT] = segment.hint;
   payload[KEY_CFG_ALERT] = segment.vibrate.length;
   sendMessage(payload, function() {
     sendVibrateAt(timers, timerIndex, segmentIndex, 0);

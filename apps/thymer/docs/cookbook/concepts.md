@@ -8,7 +8,7 @@ Use this section for general Thymer config patterns that are not tied to one dom
 [timers.focus]
 trigger = { tap = "top" }
 pattern = [
-  { description = "focus", time = "00:25:00" },
+  { name = "focus", time = "00:25:00" },
 ]
 ```
 
@@ -21,9 +21,10 @@ This is a good shape for work blocks, study intervals, or any routine with a pre
 repeat = 4
 trigger = { swipe = "l-to-r" }
 on-finished = { vibrate = "low-low-high" }
+vibrate = { intensity = "mid" }
 pattern = [
-  { description = "focus", time = "00:25:00", vibrate = { intensity = "mid" } },
-  { description = "short break", time = 5, vibrate = "low" },
+  { name = "focus", hint = "deep work", time = "00:25:00" },
+  { name = "short break", time = 5, vibrate = "low" },
 ]
 ```
 
@@ -36,7 +37,7 @@ Use the array form when one named vibration level is too coarse and you want a m
 name = "Long Break"
 trigger = { swipe = "c-to-b" }
 pattern = [
-  { description = "rest", time = "00:15:00", vibrate = [
+  { name = "rest", hint = "walk away", time = "00:15:00", vibrate = [
     { intensity = "low" },
     { duration = 200, delay = 120 },
     { intensity = "high", delay = 120 },

@@ -13,7 +13,7 @@ must-acknowledge = true
 on-press-up = "skip"
 trigger = { tap = "left" }
 pattern = [
-  { description = "Kid 1", time = "00:05:00", vibrate = "high" },
-  { description = "Kid 2", time = "00:05:00", vibrate = "high" },
+  { name = "Kid 1", time = "00:05:00", vibrate = "high" },
+  { name = "Kid 2", time = "00:05:00", vibrate = "high" },
 ]
 ```

@@ -1,6 +1,6 @@
 # Vibration
 
-Thymer uses the same vibration grammar for segment transitions and `on-finished`.
+Thymer uses the same vibration grammar for segment transitions, timer-level default `vibrate`, and `on-finished`.
 
 ## Root vibration table
 
@@ -31,6 +31,12 @@ vibrate = "low"
 ```
 
 Uses a named vibration level and the shared default pulse delay.
+
+This same syntax also works directly on `on-finished`:
+
+```toml
+on-finished = "low-low-high"
+```
 
 ## Shorthand sequence form
 
