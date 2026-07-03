@@ -25,8 +25,8 @@ logs ip:
     uv run pebble logs --phone {{ ip }}
 
 [no-cd]
-emulate:
-    uv run pebble install --emulator emery
+emulate app='' platform='emery':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble install --emulator {{ platform }}; else uv run pebble install --emulator {{ platform }}; fi
 
 [no-cd]
 clean:

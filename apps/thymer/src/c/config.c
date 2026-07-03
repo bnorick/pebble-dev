@@ -573,6 +573,25 @@ static void prv_apply_config_from_pending(bool show_notice) {
   }
 }
 
+static void prv_apply_ui_flags(uint8_t ui_flags) {
+  bool icons_enabled = (ui_flags & CONFIG_FLAG_ICONS) != 0;
+  bool background_enabled = (ui_flags & CONFIG_FLAG_BACKGROUND) != 0;
+  bool timer_accent_enabled = (ui_flags & CONFIG_FLAG_TIMER_ACCENT) != 0;
+
+  if (s_config.icons_enabled == icons_enabled &&
+      s_config.background_enabled == background_enabled &&
+      s_config.timer_accent_enabled == timer_accent_enabled) {
+    return;
+  }
+
+  s_config.icons_enabled = icons_enabled;
+  s_config.background_enabled = background_enabled;
+  s_config.timer_accent_enabled = timer_accent_enabled;
+  config_persist_config();
+  ui_refresh_background_layers();
+  ui_refresh();
+}
+
 void config_send_request(void) {
   DictionaryIterator *iter = NULL;
   if (app_message_outbox_begin(&iter) != APP_MSG_OK || !iter) {
@@ -608,6 +627,15 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       s_pending_config.timer_accent_enabled =
         (ui_flags_tuple->value->int32 & CONFIG_FLAG_TIMER_ACCENT) != 0;
     }
+    return;
+  }
+
+  if (op == CFG_OP_UI) {
+    Tuple *ui_flags_tuple = dict_find(iter, MESSAGE_KEY_CFG_UI_FLAGS);
+    if (!ui_flags_tuple) {
+      return;
+    }
+    prv_apply_ui_flags((uint8_t)ui_flags_tuple->value->int32);
     return;
   }
 

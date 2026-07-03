@@ -35,6 +35,7 @@ const CFG_OP_SEGMENT = 3;
 const CFG_OP_VIBRATE = 4;
 const CFG_OP_COMMIT = 5;
 const CFG_OP_ERROR = 6;
+const CFG_OP_UI = 7;
 
 const TRIGGER_NONE = 0;
 const TRIGGER_TAP = 1;
@@ -99,6 +100,24 @@ function saveUiSettings(settings) {
   saveBoolean(STORAGE_KEY_ICONS_ENABLED, settings.iconsEnabled);
   saveBoolean(STORAGE_KEY_BACKGROUND_ENABLED, settings.backgroundEnabled);
   saveBoolean(STORAGE_KEY_TIMER_ACCENT_ENABLED, settings.timerAccentEnabled);
+}
+
+function uiSettingsEqual(left, right) {
+  return !!left && !!right &&
+    left.iconsEnabled === right.iconsEnabled &&
+    left.backgroundEnabled === right.backgroundEnabled &&
+    left.timerAccentEnabled === right.timerAccentEnabled;
+}
+
+function uiFlagsFromSettings(uiSettings) {
+  let uiFlags = uiSettings.iconsEnabled ? CONFIG_FLAG_ICONS : 0;
+  if (uiSettings.backgroundEnabled) {
+    uiFlags |= CONFIG_FLAG_BACKGROUND;
+  }
+  if (uiSettings.timerAccentEnabled) {
+    uiFlags |= CONFIG_FLAG_TIMER_ACCENT;
+  }
+  return uiFlags;
 }
 
 const clay = new Clay(buildClayConfig({
@@ -633,13 +652,7 @@ function sendMessage(payload, onSuccess, onFailure) {
 function sendConfig(config) {
   const timers = config.timers;
   const uiSettings = loadUiSettings();
-  let uiFlags = uiSettings.iconsEnabled ? CONFIG_FLAG_ICONS : 0;
-  if (uiSettings.backgroundEnabled) {
-    uiFlags |= CONFIG_FLAG_BACKGROUND;
-  }
-  if (uiSettings.timerAccentEnabled) {
-    uiFlags |= CONFIG_FLAG_TIMER_ACCENT;
-  }
+  const uiFlags = uiFlagsFromSettings(uiSettings);
   const payload = {};
   payload[KEY_CFG_OP] = CFG_OP_BEGIN;
   payload[KEY_CFG_TIMER] = timers.length;
@@ -647,6 +660,13 @@ function sendConfig(config) {
   sendMessage(payload, function() {
     sendTimerAt(timers, 0);
   });
+}
+
+function sendUiConfig(uiSettings) {
+  const payload = {};
+  payload[KEY_CFG_OP] = CFG_OP_UI;
+  payload[KEY_CFG_UI_FLAGS] = uiFlagsFromSettings(uiSettings);
+  sendMessage(payload);
 }
 
 function sendTimerAt(timers, timerIndex) {
@@ -787,12 +807,23 @@ Pebble.addEventListener("webviewclosed", function(event) {
   try {
     const response = clay.getSettings(event.response, false);
     const toml = String((response.TomlConfig && response.TomlConfig.value) || "").trim();
+    const previousToml = loadToml().trim();
+    const previousUiSettings = loadUiSettings();
     const uiSettings = {
       iconsEnabled: !response.IconsEnabled || !!response.IconsEnabled.value,
       backgroundEnabled: !response.BackgroundEnabled || !!response.BackgroundEnabled.value,
       timerAccentEnabled: !response.TimerAccentEnabled || !!response.TimerAccentEnabled.value,
     };
+    const tomlChanged = toml !== previousToml;
+    const uiChanged = !uiSettingsEqual(previousUiSettings, uiSettings);
+    if (!tomlChanged && !uiChanged) {
+      return;
+    }
     saveUiSettings(uiSettings);
+    if (!tomlChanged) {
+      sendUiConfig(uiSettings);
+      return;
+    }
     const parsed = parseTimerToml(toml);
     saveToml(toml);
     sendConfig(parsed);

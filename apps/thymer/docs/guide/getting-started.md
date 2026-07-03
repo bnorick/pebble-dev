@@ -4,6 +4,8 @@ Timer definitions in Thymer are entered as TOML in the phone-side settings page.
 
 The app parses the TOML configuration on the phone, validates it, and sends a normalized timer model to the watch. Some additional appearance settings can be configured direction in the phone-side settings page.
 
+Thymer is on the [Pebble Appstore](https://apps.repebble.com/337bcb025b4e48788aa24d00).
+
 ## Start with one timer
 
 Every config needs at least one named timer section under `timers.*`.

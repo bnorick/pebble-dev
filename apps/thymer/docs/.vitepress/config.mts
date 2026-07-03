@@ -8,6 +8,7 @@ export default defineConfig({
     ["link", { rel: "icon", type: "image/png", href: "/pebble-dev/thymer/favicon.png" }],
   ],
   cleanUrls: true,
+  appearance: false,
   lang: "en-US",
   lastUpdated: false,
   markdown: {
@@ -27,6 +28,7 @@ export default defineConfig({
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Reference", link: "/reference/config-format" },
       { text: "Cookbook", link: "/cookbook/concepts" },
+      { text: "Pebble Appstore", link: "https://apps.repebble.com/337bcb025b4e48788aa24d00" },
     ],
     search: {
       provider: "local",
@@ -35,7 +37,7 @@ export default defineConfig({
       { icon: "github", link: "https://github.com/bnorick/pebble-dev/tree/main/apps/thymer" },
     ],
     footer: {
-      message: "Timer configuration docs for Thymer.",
+      message: 'Timer configuration docs for Thymer. <a href="https://apps.repebble.com/337bcb025b4e48788aa24d00" target="_blank" rel="noopener noreferrer">Install from the Pebble Store</a>.',
       copyright: "Pebble app docs for the pebble-dev repository",
     },
     sidebar: [

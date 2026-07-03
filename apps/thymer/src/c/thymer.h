@@ -78,6 +78,7 @@ typedef enum {
   CFG_OP_VIBRATE = 4,
   CFG_OP_COMMIT = 5,
   CFG_OP_ERROR = 6,
+  CFG_OP_UI = 7,
 } ConfigOp;
 
 typedef enum {
