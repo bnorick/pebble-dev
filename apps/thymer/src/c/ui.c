@@ -250,6 +250,20 @@ void ui_refresh(void) {
     return;
   }
 
+  if ((selected->segment_count == 0 || !selected->segments) ||
+      (active && (active->segment_count == 0 || !active->segments))) {
+    text_layer_set_text(s_title_layer, active ? active->name : selected->name);
+    text_layer_set_text(s_timer_layer, "--:--");
+    text_layer_set_text(s_status_layer, "Timer has no steps");
+    text_layer_set_text(s_detail_layer, "");
+    text_layer_set_text(s_footer_layer, "");
+    prv_layout_focus_panel();
+    prv_set_focus_panel_hidden(s_text_hidden);
+    ui_refresh_background_layers();
+    prv_refresh_button_hints();
+    return;
+  }
+
   const char *segment_name = "";
   const char *state_text = "";
 

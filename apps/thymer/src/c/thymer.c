@@ -34,6 +34,7 @@ static void prv_deinit(void) {
   timer_cancel_ack_timer();
   config_persist_state();
   ui_destroy_window();
+  config_deinit();
 }
 
 int main(void) {

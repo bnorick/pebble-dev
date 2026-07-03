@@ -3,6 +3,7 @@
 #include "thymer.h"
 
 bool config_has_persisted_config(void);
+void config_deinit(void);
 void config_default_config(void);
 void config_default_state(void);
 void config_load(void);

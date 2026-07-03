@@ -45,6 +45,9 @@ void timer_reset_phase_tracking(void) {
 }
 
 uint64_t timer_cycle_duration_ms(const TimerDefinition *timer) {
+  if (!timer || timer->segment_count == 0 || !timer->segments) {
+    return 0;
+  }
   uint64_t total = 0;
   for (uint8_t i = 0; i < timer->segment_count; ++i) {
     total = util_add_u64_saturating(total, timer->segments[i].duration_ms);
@@ -70,7 +73,7 @@ uint8_t timer_clamp_segment_index(const TimerDefinition *timer, uint8_t segment_
 }
 
 uint64_t timer_segment_start_elapsed_ms(const TimerDefinition *timer, uint8_t segment_index) {
-  if (!timer) {
+  if (!timer || timer->segment_count == 0 || !timer->segments) {
     return 0;
   }
 
@@ -236,7 +239,7 @@ static void prv_schedule_finish_wakeup(void) {
 
 TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_ms) {
   TimerSnapshot snap = {0};
-  if (!timer || timer->segment_count == 0) {
+  if (!timer || timer->segment_count == 0 || !timer->segments) {
     return snap;
   }
 
@@ -442,6 +445,9 @@ void timer_start(uint8_t timer_index) {
     return;
   }
   const TimerDefinition *timer = &s_config.timers[timer_index];
+  if (timer->segment_count == 0 || !timer->segments) {
+    return;
+  }
   uint8_t start_segment = timer_allows_skip(timer)
     ? timer_clamp_segment_index(timer, s_selected_segment)
     : 0;
@@ -563,7 +569,7 @@ void timer_silence_acknowledgement(bool reveal_text) {
 
 bool timer_skip_selected_segment(void) {
   const TimerDefinition *timer = timer_selected_timer();
-  if (!timer_allows_skip(timer)) {
+  if (!timer || timer->segment_count == 0 || !timer->segments || !timer_allows_skip(timer)) {
     return false;
   }
 
@@ -578,7 +584,7 @@ bool timer_skip_active_segment(void) {
   }
 
   const TimerDefinition *timer = timer_active_timer();
-  if (!timer_allows_skip(timer)) {
+  if (!timer || timer->segment_count == 0 || !timer->segments || !timer_allows_skip(timer)) {
     return false;
   }
 

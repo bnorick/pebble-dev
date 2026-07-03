@@ -26,7 +26,7 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Reference", link: "/reference/config-format" },
-      { text: "Examples", link: "/cookbook/examples" },
+      { text: "Cookbook", link: "/cookbook/concepts" },
     ],
     search: {
       provider: "local",
@@ -58,7 +58,11 @@ export default defineConfig({
       {
         text: "Cookbook",
         items: [
-          { text: "Examples", link: "/cookbook/examples" },
+          { text: "General Concepts", link: "/cookbook/concepts" },
+          { text: "Breathing", link: "/cookbook/breathing" },
+          { text: "Exercise", link: "/cookbook/exercise" },
+          { text: "Kids", link: "/cookbook/kids" },
+          { text: "Full Config", link: "/cookbook/full-config" },
         ],
       },
       {

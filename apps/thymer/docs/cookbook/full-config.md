@@ -1,46 +1,8 @@
-# Examples
+# Full Config
 
-## Minimal single timer
-
-```toml
-[timers.focus]
-trigger = { tap = "top" }
-pattern = [
-  { description = "focus", time = "00:25:00" },
-]
-```
-
-## Finite repeating timer
-
-```toml
-[timers.focus-block]
-repeat = 4
-trigger = { swipe = "l-to-r" }
-on-finished = { vibrate = "low-low-high" }
-pattern = [
-  { description = "focus", time = "00:25:00", vibrate = { intensity = "mid" } },
-  { description = "short break", time = 5, vibrate = "low" },
-]
-```
-
-## Per-segment vibration array
-
-```toml
-[timers.long-break]
-name = "Long Break"
-trigger = { swipe = "c-to-b" }
-pattern = [
-  { description = "rest", time = "00:15:00", vibrate = [
-    { intensity = "low" },
-    { duration = 200, delay = 120 },
-    { intensity = "high", delay = 120 },
-  ] },
-]
-```
+This page carries the current checked-in example config. Keep it in sync with `examples/full-config.toml`.
 
 ## Full example
-
-This is the current checked-in example config.
 
 ```toml
 # Shared vibration presets.

@@ -7,7 +7,7 @@
 #define APP_NAME "Thymer"
 
 #define MAX_TIMERS 8
-#define MAX_SEGMENTS 8
+#define MAX_SEGMENTS 30
 #define MAX_NAME_LEN 24
 #define MAX_DESC_LEN 24
 #define MAX_VIBE_STEPS 4
@@ -134,7 +134,7 @@ typedef struct {
   TriggerZone trigger_from;
   TriggerZone trigger_to;
   VibeStep finish_vibes[MAX_VIBE_STEPS];
-  TimerSegment segments[MAX_SEGMENTS];
+  TimerSegment *segments;
 } TimerDefinition;
 
 typedef struct __attribute__((__packed__)) {

@@ -2,7 +2,7 @@
 
 The current config format is intentionally narrow. A valid document is made of an optional `[vibration]` table plus one or more named timer sections.
 
-## Top-level shape
+## Top-level
 
 ```toml
 [vibration]
@@ -36,20 +36,3 @@ Required named timer sections:
 - `<name>` is used as the default display name when `name` is omitted
 - at least one timer is required
 - each timer must define `trigger` and `pattern`
-
-## Unsupported legacy forms
-
-These older shapes are rejected:
-
-```toml
-[[timers]]
-```
-
-```toml
-name = "Focus"
-pattern = []
-```
-
-The parser will report:
-
-- `root-level fields are not supported; use [timers.<name>] entries`

@@ -8,7 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_EXAMPLE_PATH = REPO_ROOT / "examples" / "full-config.toml"
 TARGETS = [
   {
-    "path": REPO_ROOT / "docs" / "cookbook" / "examples.md",
+    "path": REPO_ROOT / "docs" / "cookbook" / "full-config.md",
     "heading": "## Full example",
     "language": "toml",
     "description": "docs full example block",

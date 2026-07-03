@@ -1,6 +1,8 @@
 # Getting Started
 
-Thymer timer definitions are entered as TOML in the phone-side settings page. The app parses that TOML on the phone, validates it, and sends a normalized timer model to the watch.
+Timer definitions in Thymer are entered as TOML in the phone-side settings page. While it can be useful for quick changes, I don't recommend editing your timers extensively in that small input box. Personally, I copy paste my configuration from my note taking app, where I make changes on my computer that are synced to my phone.
+
+The app parses the TOML configuration on the phone, validates it, and sends a normalized timer model to the watch. Some additional appearance settings can be configured direction in the phone-side settings page.
 
 ## Start with one timer
 
@@ -29,14 +31,12 @@ Only these top-level sections are part of the current config model:
 - `[vibration]`
 - `[timers.<name>]`
 
-Legacy root-level timer fields and `[[timers]]` arrays are rejected.
+## Appearance settings
 
-## Appearance settings are separate
-
-The settings UI also exposes watch-side appearance toggles such as icons, background, and timer accent images. Those toggles are not part of the TOML config. They are stored separately from the timer definition.
+The settings UI also exposes watch-side appearance toggles for icon display, background display, and timer accent. Those toggles are not part of the TOML config. They are stored separately from the timer definition.
 
 ## Next steps
 
 - Read [Config Format](/reference/config-format) for the supported top-level structure.
 - Read [Timers](/reference/timers) for per-timer fields.
-- Read [Examples](/cookbook/examples) for longer configs.
+- Read [Cookbook](/cookbook/concepts) for worked recipes and longer configs.
