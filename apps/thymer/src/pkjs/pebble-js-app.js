@@ -28,6 +28,8 @@ const KEY_CFG_UP_LONG_ACTION = 10017;
 const KEY_CFG_UI_FLAGS = 10018;
 const KEY_CFG_ACK_DURATION = 10019;
 const KEY_CFG_HINT = 10020;
+const KEY_CFG_UP_ACTION_TIME = 10021;
+const KEY_CFG_UP_LONG_ACTION_TIME = 10022;
 
 const CFG_OP_BEGIN = 1;
 const CFG_OP_TIMER = 2;
@@ -65,6 +67,25 @@ const DEFAULT_VIBRATION_LEVELS = {
 const UP_ACTION_NONE = 0;
 const UP_ACTION_SKIP = 1;
 const UP_ACTION_HIDE = 2;
+const UP_ACTION_INCREMENT = 3;
+const UP_ACTION_DECREMENT = 4;
+
+function parseUpActionKind(raw, fieldName, index) {
+  switch (String(raw == null ? "" : raw).trim().toLowerCase()) {
+    case "skip":
+      return UP_ACTION_SKIP;
+    case "hide":
+      return UP_ACTION_HIDE;
+    case "increment":
+      return UP_ACTION_INCREMENT;
+    case "decrement":
+      return UP_ACTION_DECREMENT;
+    default:
+      throw new Error(
+        `timer ${index + 1} ${fieldName} action must be "skip", "hide", "increment", or "decrement"`
+      );
+  }
+}
 const CONFIG_FLAG_ICONS = 0x1;
 const CONFIG_FLAG_BACKGROUND = 0x2;
 const CONFIG_FLAG_TIMER_ACCENT = 0x4;
@@ -251,6 +272,18 @@ function parseAssignments(text) {
   return result;
 }
 
+function assertAllowedKeys(raw, allowedKeys, context) {
+  const allowed = {};
+  allowedKeys.forEach(function(key) {
+    allowed[key] = true;
+  });
+  Object.keys(raw).forEach(function(key) {
+    if (!allowed[key]) {
+      throw new Error(`${context} uses unsupported key: ${key}`);
+    }
+  });
+}
+
 function titleCaseKey(key) {
   return String(key)
     .replace(/[-_]+/g, " ")
@@ -304,6 +337,7 @@ function normalizeTrigger(trigger) {
   if (!trigger || typeof trigger !== "object") {
     throw new Error("trigger must be an inline table");
   }
+  assertAllowedKeys(trigger, ["tap", "swipe"], "trigger");
   if (trigger.tap) {
     return {
       kind: TRIGGER_TAP,
@@ -487,6 +521,7 @@ function normalizeVibrateStep(raw, vibrationConfig) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("vibrate step must be a string or inline table");
   }
+  assertAllowedKeys(raw, ["intensity", "duration", "delay"], "vibrate step");
   const hasIntensity = raw.intensity != null;
   const hasDuration = raw.duration != null;
   if (hasIntensity && hasDuration) {
@@ -523,6 +558,7 @@ function normalizeFinishVibrate(raw, index, vibrationConfig) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(`timer ${index + 1} on-finished must be an inline table`);
   }
+  assertAllowedKeys(raw, ["vibrate"], `timer ${index + 1} on-finished`);
   if (raw.vibrate == null) {
     throw new Error(`timer ${index + 1} on-finished must define vibrate`);
   }
@@ -530,26 +566,57 @@ function normalizeFinishVibrate(raw, index, vibrationConfig) {
 }
 
 function normalizeUpAction(raw, fieldName, index) {
-  if (raw == null) return UP_ACTION_NONE;
-  if (typeof raw !== "string") {
-    throw new Error(`timer ${index + 1} ${fieldName} must be \"skip\" or \"hide\"`);
+  if (raw == null) {
+    return { kind: UP_ACTION_NONE, durationMs: 0 };
   }
-  switch (raw.trim().toLowerCase()) {
-    case "skip":
-      return UP_ACTION_SKIP;
-    case "hide":
-      return UP_ACTION_HIDE;
-    default:
-      throw new Error(`timer ${index + 1} ${fieldName} must be \"skip\" or \"hide\"`);
+
+  if (typeof raw === "string") {
+    const kind = parseUpActionKind(raw, fieldName, index);
+    if (kind === UP_ACTION_INCREMENT || kind === UP_ACTION_DECREMENT) {
+      throw new Error(`timer ${index + 1} ${fieldName} must use an inline table for ${raw}`);
+    }
+    return {
+      kind: kind,
+      durationMs: 0,
+    };
   }
+
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`timer ${index + 1} ${fieldName} must be a string or inline table`);
+  }
+  assertAllowedKeys(raw, ["action", "time"], `timer ${index + 1} ${fieldName}`);
+
+  const kind = parseUpActionKind(raw.action, fieldName, index);
+  const needsTime = kind === UP_ACTION_INCREMENT || kind === UP_ACTION_DECREMENT;
+  if (needsTime && raw.time == null) {
+    throw new Error(`timer ${index + 1} ${fieldName} must define time for ${raw.action}`);
+  }
+  if (!needsTime && raw.time != null) {
+    throw new Error(`timer ${index + 1} ${fieldName} only supports time with increment/decrement`);
+  }
+
+  return {
+    kind: kind,
+    durationMs: needsTime ? normalizeSegmentDurationMs(raw.time) : 0,
+  };
 }
 
 function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
+  assertAllowedKeys(raw, [
+    "name",
+    "repeat",
+    "trigger",
+    "pattern",
+    "vibrate",
+    "on-finished",
+    "on-press-up",
+    "on-long-press-up",
+    "must-acknowledge",
+    "repeat-pattern-delay",
+    "acknowledgment-alert-duration",
+  ], `timer ${index + 1}`);
   if (!Array.isArray(raw.pattern) || raw.pattern.length === 0) {
     throw new Error(`timer ${index + 1} is missing pattern`);
-  }
-  if (raw.iterations != null) {
-    throw new Error(`timer ${index + 1} uses unsupported key: iterations`);
   }
   const rawRepeat = raw.repeat;
   const repeatForever = rawRepeat === true;
@@ -586,9 +653,11 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
       if (!segment || typeof segment !== "object") {
         throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} must be inline table`);
       }
-      if (segment.description != null || segment.desc != null) {
-        throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} uses unsupported key: description`);
-      }
+      assertAllowedKeys(
+        segment,
+        ["name", "hint", "time", "vibrate"],
+        `timer ${index + 1} pattern ${segmentIndex + 1}`
+      );
       return {
         name: segment.name == null ? "" : String(segment.name),
         hint: segment.hint == null ? "" : String(segment.hint),
@@ -733,8 +802,10 @@ function sendTimerAt(timers, timerIndex) {
   payload[KEY_CFG_ALERT] = timer.finishVibrate.length;
   payload[KEY_CFG_REPEAT_PATTERN_DELAY] = timer.repeatPatternDelay;
   payload[KEY_CFG_ACK_DURATION] = timer.acknowledgeAlertDuration;
-  payload[KEY_CFG_UP_ACTION] = timer.onPressUp;
-  payload[KEY_CFG_UP_LONG_ACTION] = timer.onLongPressUp;
+  payload[KEY_CFG_UP_ACTION] = timer.onPressUp.kind;
+  payload[KEY_CFG_UP_LONG_ACTION] = timer.onLongPressUp.kind;
+  payload[KEY_CFG_UP_ACTION_TIME] = encodeUint64Bytes(timer.onPressUp.durationMs);
+  payload[KEY_CFG_UP_LONG_ACTION_TIME] = encodeUint64Bytes(timer.onLongPressUp.durationMs);
   payload[KEY_CFG_TEXT] = timer.name;
   sendMessage(payload, function() {
     sendSegmentAt(timers, timerIndex, 0);

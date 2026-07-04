@@ -10,7 +10,6 @@
     "@rebble/clay": "^1.0.10"
   },
   "scripts": {
-    "check:example-sync": "uv run scripts/check_example_sync.py",
     "check:timer-limit-sync": "python3 scripts/check_timer_limit_sync.py",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
@@ -84,6 +83,16 @@
           "type": "bitmap",
           "name": "IMAGE_MUTE",
           "file": "mute.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_INCREMENT",
+          "file": "increment.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_DECREMENT",
+          "file": "decrement.png"
         },
         {
           "type": "bitmap",

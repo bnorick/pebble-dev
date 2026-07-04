@@ -54,3 +54,17 @@ trigger = { swipe = "up" }
 ## `timer N cannot use on-finished with repeat = true`
 
 Infinite timers never finish, so `on-finished` only works with one-shot and finite repeating timers.
+
+## `... uses unsupported key: ...`
+
+The parser is strict. Unknown keys in timer tables and inline tables are rejected instead of being ignored.
+
+Common examples:
+
+```toml
+[timers.focus]
+trigger = { tap = "top", zone = "left" }
+pattern = [
+  { time = 5, description = "work" },
+]
+```

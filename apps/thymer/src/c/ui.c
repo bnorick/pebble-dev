@@ -30,6 +30,8 @@ static GBitmap *s_pause_icon;
 static GBitmap *s_skip_icon;
 static GBitmap *s_hide_icon;
 static GBitmap *s_mute_icon;
+static GBitmap *s_increment_icon;
+static GBitmap *s_decrement_icon;
 static GBitmap *s_reset_icon;
 static GBitmap *s_background_bitmap;
 static GBitmap *s_focus_panel_top_bitmap;
@@ -56,6 +58,24 @@ enum {
 
 static bool prv_text_is_empty(const char *text) {
   return !text || text[0] == '\0';
+}
+
+static GBitmap *prv_up_action_icon(UpAction action) {
+  switch (action) {
+    case UP_ACTION_SKIP:
+      return s_skip_icon;
+    case UP_ACTION_HIDE:
+      return s_hide_icon;
+    case UP_ACTION_INCREMENT:
+      return s_increment_icon;
+    case UP_ACTION_DECREMENT:
+      return s_decrement_icon;
+    case UP_ACTION_MUTE:
+      return s_mute_icon;
+    case UP_ACTION_NONE:
+    default:
+      return NULL;
+  }
 }
 
 static int16_t prv_measure_text_height(const char *text, GFont font, int16_t width,
@@ -269,13 +289,12 @@ static void prv_refresh_button_hints(void) {
                           (!short_visible && long_visible);
 
   layer_set_hidden(bitmap_layer_get_layer(s_select_icon_layer), false);
-  layer_set_hidden(bitmap_layer_get_layer(s_skip_icon_layer), shown_action != UP_ACTION_SKIP);
-  bitmap_layer_set_bitmap(s_hide_icon_layer, shown_action == UP_ACTION_MUTE ? s_mute_icon : s_hide_icon);
-  layer_set_hidden(bitmap_layer_get_layer(s_hide_icon_layer),
-                   shown_action != UP_ACTION_HIDE && shown_action != UP_ACTION_MUTE);
+  bitmap_layer_set_bitmap(s_skip_icon_layer, prv_up_action_icon(shown_action));
+  layer_set_hidden(bitmap_layer_get_layer(s_skip_icon_layer), shown_action == UP_ACTION_NONE);
+  layer_set_hidden(bitmap_layer_get_layer(s_hide_icon_layer), true);
   text_layer_set_text(s_up_long_hint_layer, show_long_marker ? "L" : "");
   layer_set_hidden(text_layer_get_layer(s_up_long_hint_layer), !show_long_marker);
-  layer_set_hidden(bitmap_layer_get_layer(s_reset_icon_layer), !s_state.active);
+  layer_set_hidden(bitmap_layer_get_layer(s_reset_icon_layer), !timer_reset_available());
 }
 
 static void prv_layout_text_layers(void) {
@@ -459,7 +478,10 @@ void ui_refresh(void) {
   if (s_state.active && active) {
     TimerSnapshot snap = timer_current_snapshot();
     const TimerSegment *segment = &active->segments[snap.phase_index];
-    util_format_duration(snap.phase_remaining_ms, s_time_buffer, sizeof(s_time_buffer));
+    uint64_t shown_remaining_ms = s_state.duration_adjustment_ms != 0
+      ? snap.total_remaining_ms
+      : snap.phase_remaining_ms;
+    util_format_duration(shown_remaining_ms, s_time_buffer, sizeof(s_time_buffer));
 
     s_iteration_buffer[0] = '\0';
     if (active->repeat) {
@@ -483,8 +505,10 @@ void ui_refresh(void) {
     uint8_t preview_segment = timer_allows_skip(selected)
       ? timer_clamp_segment_index(selected, s_selected_segment)
       : 0;
-    util_format_duration(selected->segments[preview_segment].duration_ms,
-                         s_time_buffer, sizeof(s_time_buffer));
+    uint64_t shown_duration_ms = s_state.duration_adjustment_ms != 0
+      ? timer_adjusted_total_duration_ms(selected)
+      : selected->segments[preview_segment].duration_ms;
+    util_format_duration(shown_duration_ms, s_time_buffer, sizeof(s_time_buffer));
     segment_name = selected->segments[preview_segment].name;
     segment_hint = selected->segments[preview_segment].hint;
     s_iteration_buffer[0] = '\0';
@@ -601,6 +625,8 @@ static void prv_window_load(Window *window) {
   s_skip_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SKIP);
   s_hide_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_HIDE);
   s_mute_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MUTE);
+  s_increment_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_INCREMENT);
+  s_decrement_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_DECREMENT);
   s_reset_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_RESET);
 
   int16_t icon_x = bounds.size.w - BUTTON_HINT_WIDTH;
@@ -701,6 +727,8 @@ static void prv_window_unload(Window *window) {
   gbitmap_destroy(s_skip_icon);
   gbitmap_destroy(s_hide_icon);
   gbitmap_destroy(s_mute_icon);
+  gbitmap_destroy(s_increment_icon);
+  gbitmap_destroy(s_decrement_icon);
   gbitmap_destroy(s_reset_icon);
   if (s_background_bitmap) {
     gbitmap_destroy(s_background_bitmap);

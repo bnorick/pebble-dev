@@ -59,7 +59,8 @@ bool timer_allows_skip(const TimerDefinition *timer) {
   if (!timer || timer->segment_count <= 1) {
     return false;
   }
-  return timer->on_press_up == UP_ACTION_SKIP || timer->on_long_press_up == UP_ACTION_SKIP;
+  return timer->on_press_up.kind == UP_ACTION_SKIP ||
+         timer->on_long_press_up.kind == UP_ACTION_SKIP;
 }
 
 uint8_t timer_clamp_segment_index(const TimerDefinition *timer, uint8_t segment_index) {
@@ -104,6 +105,19 @@ uint64_t timer_total_duration_ms(const TimerDefinition *timer) {
     return util_mul_u64_saturating(cycle, timer->iterations);
   }
   return 0;
+}
+
+static uint64_t prv_adjusted_total_duration_ms(uint64_t base_duration_ms) {
+  if (s_state.duration_adjustment_ms >= 0) {
+    return util_add_u64_saturating(base_duration_ms, (uint64_t)s_state.duration_adjustment_ms);
+  }
+
+  uint64_t reduction_ms = (uint64_t)(-s_state.duration_adjustment_ms);
+  return reduction_ms >= base_duration_ms ? 0 : (base_duration_ms - reduction_ms);
+}
+
+uint64_t timer_adjusted_total_duration_ms(const TimerDefinition *timer) {
+  return prv_adjusted_total_duration_ms(timer_total_duration_ms(timer));
 }
 
 uint32_t timer_vibration_pattern_duration_ms(const VibeStep *steps, uint8_t step_count) {
@@ -215,7 +229,7 @@ static void prv_schedule_finish_wakeup(void) {
   if (!timer || !s_state.running || !timer_has_finite_end(timer)) {
     return;
   }
-  uint64_t total_duration = timer_total_duration_ms(timer);
+  uint64_t total_duration = prv_adjusted_total_duration_ms(timer_total_duration_ms(timer));
   uint64_t elapsed = util_now_ms() - s_state.started_at_ms;
   if (elapsed >= total_duration) {
     return;
@@ -237,7 +251,9 @@ static void prv_schedule_finish_wakeup(void) {
           (unsigned long long)remaining_s, (long)id);
 }
 
-TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_ms) {
+static TimerSnapshot prv_timer_snapshot_for_duration(const TimerDefinition *timer,
+                                                     uint64_t elapsed_ms,
+                                                     uint64_t total_duration_ms) {
   TimerSnapshot snap = {0};
   if (!timer || timer->segment_count == 0 || !timer->segments) {
     return snap;
@@ -247,7 +263,8 @@ TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_
   snap.elapsed_ms = elapsed_ms;
   snap.cycle_duration_ms = timer_cycle_duration_ms(timer);
   snap.infinite = !timer_has_finite_end(timer);
-  snap.total_duration_ms = timer_total_duration_ms(timer);
+  snap.total_duration_ms = total_duration_ms;
+  uint64_t base_total_duration_ms = timer_total_duration_ms(timer);
 
   if (!snap.cycle_duration_ms) {
     return snap;
@@ -261,6 +278,17 @@ TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_
     snap.iteration_index = snap.iteration_count ? (snap.iteration_count - 1) : 0;
     snap.phase_index = timer->segment_count - 1;
     snap.phase_remaining_ms = 0;
+    return snap;
+  }
+
+  if (!snap.infinite && elapsed_ms >= base_total_duration_ms &&
+      snap.total_duration_ms > base_total_duration_ms) {
+    snap.iteration_count = timer->repeat ? timer->iterations : 1;
+    snap.iteration_index = snap.iteration_count ? (snap.iteration_count - 1) : 0;
+    snap.phase_index = timer->segment_count - 1;
+    snap.phase_remaining_ms = snap.total_duration_ms - elapsed_ms;
+    snap.total_remaining_ms = snap.phase_remaining_ms;
+    snap.cycle_elapsed_ms = snap.cycle_duration_ms;
     return snap;
   }
 
@@ -288,6 +316,10 @@ TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_
   return snap;
 }
 
+TimerSnapshot timer_snapshot_for(const TimerDefinition *timer, uint64_t elapsed_ms) {
+  return prv_timer_snapshot_for_duration(timer, elapsed_ms, timer_total_duration_ms(timer));
+}
+
 TimerSnapshot timer_current_snapshot(void) {
   const TimerDefinition *timer = timer_active_timer();
   if (!timer) {
@@ -297,7 +329,10 @@ TimerSnapshot timer_current_snapshot(void) {
   uint64_t elapsed_ms = s_state.running
     ? (util_now_ms() - s_state.started_at_ms)
     : s_state.paused_elapsed_ms;
-  return timer_snapshot_for(timer, elapsed_ms);
+  return prv_timer_snapshot_for_duration(
+    timer,
+    elapsed_ms,
+    prv_adjusted_total_duration_ms(timer_total_duration_ms(timer)));
 }
 
 bool timer_next_segment_after(const TimerDefinition *timer,
@@ -519,6 +554,7 @@ void timer_reset(void) {
   s_state.paused_elapsed_ms = 0;
   s_state.started_at_ms = 0;
   s_state.ack_started_at_ms = 0;
+  s_state.duration_adjustment_ms = 0;
   timer_reset_phase_tracking();
   timer_cancel_wakeup();
   timer_cancel_ack_timer();
@@ -526,6 +562,10 @@ void timer_reset(void) {
   config_persist_state();
   timer_ensure_refresh_timer();
   ui_refresh();
+}
+
+bool timer_reset_available(void) {
+  return s_state.active || s_state.duration_adjustment_ms != 0;
 }
 
 void timer_dismiss_acknowledgement(bool reveal_text) {
@@ -621,15 +661,69 @@ bool timer_skip_active_segment(void) {
   return true;
 }
 
+static const UpActionDefinition *prv_current_up_action_definition(bool long_press) {
+  const TimerDefinition *timer = s_state.active ? timer_active_timer() : timer_selected_timer();
+  if (!timer) {
+    return NULL;
+  }
+  return long_press ? &timer->on_long_press_up : &timer->on_press_up;
+}
+
+static bool prv_adjust_active_timer(uint64_t delta_ms, bool increment) {
+  if (s_state.active && (s_state.completed || s_state.awaiting_ack)) {
+    return false;
+  }
+
+  const TimerDefinition *timer = s_state.active ? timer_active_timer() : timer_selected_timer();
+  if (!timer) {
+    return false;
+  }
+
+  if (increment) {
+    if (delta_ms > (uint64_t)INT64_MAX - (uint64_t)(s_state.duration_adjustment_ms > 0
+        ? s_state.duration_adjustment_ms : 0)) {
+      s_state.duration_adjustment_ms = INT64_MAX;
+    } else {
+      s_state.duration_adjustment_ms += (int64_t)delta_ms;
+    }
+  } else {
+    if (delta_ms > (uint64_t)INT64_MAX - (uint64_t)(s_state.duration_adjustment_ms < 0
+        ? -s_state.duration_adjustment_ms : 0)) {
+      s_state.duration_adjustment_ms = -INT64_MAX;
+    } else {
+      s_state.duration_adjustment_ms -= (int64_t)delta_ms;
+    }
+  }
+
+  if (s_state.active) {
+    s_state.completed = false;
+    s_state.alert_fired = false;
+    s_state.ack_silenced = false;
+    s_state.ack_started_at_ms = 0;
+    timer_cancel_ack_timer();
+
+    timer_update_running_state();
+    if (s_state.running) {
+      prv_schedule_finish_wakeup();
+    } else if (!s_state.awaiting_ack) {
+      timer_cancel_wakeup();
+    }
+  }
+  config_persist_state();
+  timer_ensure_refresh_timer();
+  ui_refresh();
+  return true;
+}
+
 UpAction timer_current_up_action(bool long_press) {
   if (s_state.awaiting_ack) {
     return (!long_press && !s_state.ack_silenced) ? UP_ACTION_MUTE : UP_ACTION_NONE;
   }
-  const TimerDefinition *timer = s_state.active ? timer_active_timer() : timer_selected_timer();
-  if (!timer) {
+  const UpActionDefinition *action = prv_current_up_action_definition(long_press);
+  if (!action) {
     return UP_ACTION_NONE;
   }
-  return long_press ? timer->on_long_press_up : timer->on_press_up;
+  return action->kind;
 }
 
 bool timer_up_action_available(UpAction action) {
@@ -639,13 +733,21 @@ bool timer_up_action_available(UpAction action) {
     case UP_ACTION_HIDE:
     case UP_ACTION_MUTE:
       return true;
+    case UP_ACTION_INCREMENT:
+    case UP_ACTION_DECREMENT:
+      if (s_state.active) {
+        return !s_state.completed && !s_state.awaiting_ack && timer_active_timer() != NULL;
+      }
+      return timer_selected_timer() != NULL;
     case UP_ACTION_NONE:
     default:
       return false;
   }
 }
 
-bool timer_handle_up_action(UpAction action) {
+bool timer_handle_up_action(bool long_press) {
+  UpAction action = timer_current_up_action(long_press);
+  const UpActionDefinition *definition = prv_current_up_action_definition(long_press);
   switch (action) {
     case UP_ACTION_SKIP:
       if (timer_skip_active_segment()) {
@@ -654,6 +756,10 @@ bool timer_handle_up_action(UpAction action) {
       return timer_skip_selected_segment();
     case UP_ACTION_HIDE:
       return ui_toggle_text_hidden();
+    case UP_ACTION_INCREMENT:
+      return definition ? prv_adjust_active_timer(definition->duration_ms, true) : false;
+    case UP_ACTION_DECREMENT:
+      return definition ? prv_adjust_active_timer(definition->duration_ms, false) : false;
     case UP_ACTION_MUTE:
       timer_silence_acknowledgement(true);
       return true;

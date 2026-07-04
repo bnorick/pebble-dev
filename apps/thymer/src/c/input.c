@@ -128,6 +128,9 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
     return;
   }
 
+  if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
+    s_state.duration_adjustment_ms = 0;
+  }
   s_state.selected_timer = (uint8_t)next;
   s_selected_segment = 0;
   PRV_DEBUG_TOUCH_LOG("gesture matched timer=%u segment_reset=1",
@@ -218,6 +221,9 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
       }
 
       ui_reveal_text_if_hidden();
+      if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
+        s_state.duration_adjustment_ms = 0;
+      }
       s_state.selected_timer = (uint8_t)next;
       s_selected_segment = 0;
       PRV_DEBUG_TOUCH_LOG("swipe matched timer=%u segment_reset=1",
@@ -262,7 +268,7 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (revealed && action == UP_ACTION_HIDE) {
     return;
   }
-  (void)timer_handle_up_action(action);
+  (void)timer_handle_up_action(false);
 }
 
 static void prv_up_long_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -273,14 +279,16 @@ static void prv_up_long_click_handler(ClickRecognizerRef recognizer, void *conte
   if (revealed && action == UP_ACTION_HIDE) {
     return;
   }
-  (void)timer_handle_up_action(action);
+  (void)timer_handle_up_action(true);
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
   (void)recognizer;
   (void)context;
   ui_reveal_text_if_hidden();
-  timer_reset();
+  if (timer_reset_available()) {
+    timer_reset();
+  }
 }
 
 void input_click_config_provider(void *context) {

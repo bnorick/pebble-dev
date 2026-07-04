@@ -205,8 +205,10 @@ static bool prv_timers_equal(const TimerDefinition *a, const TimerDefinition *b)
       a->repeat != b->repeat ||
       a->iterations_enabled != b->iterations_enabled ||
       a->must_acknowledge != b->must_acknowledge ||
-      a->on_press_up != b->on_press_up ||
-      a->on_long_press_up != b->on_long_press_up ||
+      a->on_press_up.kind != b->on_press_up.kind ||
+      a->on_press_up.duration_ms != b->on_press_up.duration_ms ||
+      a->on_long_press_up.kind != b->on_long_press_up.kind ||
+      a->on_long_press_up.duration_ms != b->on_long_press_up.duration_ms ||
       a->iterations != b->iterations ||
       a->repeat_pattern_delay_ms != b->repeat_pattern_delay_ms ||
       a->acknowledge_alert_duration_s != b->acknowledge_alert_duration_s ||
@@ -358,8 +360,10 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
     timer->repeat = (timer_record.flags & TIMER_FLAG_REPEAT) != 0;
     timer->iterations_enabled = (timer_record.flags & TIMER_FLAG_ITERATIONS_ENABLED) != 0;
     timer->must_acknowledge = (timer_record.flags & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0;
-    timer->on_press_up = util_clamp_up_action(timer_record.on_press_up);
-    timer->on_long_press_up = util_clamp_up_action(timer_record.on_long_press_up);
+    timer->on_press_up.kind = util_clamp_up_action(timer_record.on_press_up);
+    timer->on_press_up.duration_ms = timer_record.on_press_up_duration_ms;
+    timer->on_long_press_up.kind = util_clamp_up_action(timer_record.on_long_press_up);
+    timer->on_long_press_up.duration_ms = timer_record.on_long_press_up_duration_ms;
     timer->iterations = timer_record.iterations;
     timer->repeat_pattern_delay_ms = timer_record.repeat_pattern_delay_ms;
     timer->acknowledge_alert_duration_s = timer_record.acknowledge_alert_duration_s;
@@ -471,8 +475,10 @@ void config_persist_config(void) {
       timer_record.flags = (timer->repeat ? TIMER_FLAG_REPEAT : 0) |
                            (timer->iterations_enabled ? TIMER_FLAG_ITERATIONS_ENABLED : 0) |
                            (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0);
-      timer_record.on_press_up = (uint8_t)timer->on_press_up;
-      timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up;
+      timer_record.on_press_up = (uint8_t)timer->on_press_up.kind;
+      timer_record.on_press_up_duration_ms = timer->on_press_up.duration_ms;
+      timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up.kind;
+      timer_record.on_long_press_up_duration_ms = timer->on_long_press_up.duration_ms;
       timer_record.iterations = timer->iterations;
       timer_record.repeat_pattern_delay_ms = timer->repeat_pattern_delay_ms;
       timer_record.acknowledge_alert_duration_s = timer->acknowledge_alert_duration_s;
@@ -701,6 +707,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *ack_duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_ACK_DURATION);
     Tuple *up_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION);
     Tuple *up_long_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION);
+    Tuple *up_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION_TIME);
+    Tuple *up_long_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME);
     if (!timer_tuple) {
       return;
     }
@@ -720,10 +728,14 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       ? ((flags_tuple->value->int32 & TIMER_FLAG_ITERATIONS_ENABLED) != 0) : false;
     timer->must_acknowledge = flags_tuple
       ? ((flags_tuple->value->int32 & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0) : false;
-    timer->on_press_up = up_action_tuple
+    timer->on_press_up.kind = up_action_tuple
       ? util_clamp_up_action(up_action_tuple->value->int32) : UP_ACTION_NONE;
-    timer->on_long_press_up = up_long_action_tuple
+    timer->on_press_up.duration_ms = 0;
+    (void)util_read_uint64_tuple(up_action_time_tuple, &timer->on_press_up.duration_ms);
+    timer->on_long_press_up.kind = up_long_action_tuple
       ? util_clamp_up_action(up_long_action_tuple->value->int32) : UP_ACTION_NONE;
+    timer->on_long_press_up.duration_ms = 0;
+    (void)util_read_uint64_tuple(up_long_action_time_tuple, &timer->on_long_press_up.duration_ms);
     timer->iterations = iter_tuple
       ? (uint16_t)util_clamp_i32(iter_tuple->value->int32, 0, 65535) : 0;
     timer->repeat_pattern_delay_ms = repeat_pattern_delay_tuple
