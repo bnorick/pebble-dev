@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "app_state.h"
+#include "input.h"
 #include "timer.h"
 #include "ui.h"
 #include "util.h"
@@ -659,6 +660,21 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   (void)context;
   Tuple *op_tuple = dict_find(iter, MESSAGE_KEY_CFG_OP);
   if (!op_tuple) {
+#if defined(SCREENSHOT_SUPPORT)
+    Tuple *kind_tuple = dict_find(iter, MESSAGE_KEY_CFG_TRIGGER_KIND);
+    Tuple *from_tuple = dict_find(iter, MESSAGE_KEY_CFG_TRIGGER_FROM);
+    Tuple *to_tuple = dict_find(iter, MESSAGE_KEY_CFG_TRIGGER_TO);
+    if (kind_tuple && from_tuple) {
+      TriggerKind kind = (TriggerKind)util_clamp_i32(kind_tuple->value->int32, TRIGGER_NONE,
+                                                     TRIGGER_SWIPE);
+      TriggerZone from = (TriggerZone)util_clamp_i32(from_tuple->value->int32, ZONE_NONE,
+                                                     ZONE_CENTER);
+      TriggerZone to = to_tuple
+        ? (TriggerZone)util_clamp_i32(to_tuple->value->int32, ZONE_NONE, ZONE_CENTER)
+        : ZONE_NONE;
+      (void)input_select_timer_for_trigger(kind, from, to);
+    }
+#endif
     return;
   }
 

@@ -116,7 +116,18 @@ static bool prv_directional_swipe_for_delta(int16_t dx, int16_t dy,
   return true;
 }
 
+static bool prv_touch_selection_enabled(void) {
+  return !s_state.active || s_state.completed;
+}
+
 static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, TriggerZone to) {
+  if (!prv_touch_selection_enabled()) {
+    PRV_DEBUG_TOUCH_LOG("gesture ignored kind=%s active=%d running=%d awaiting_ack=%d completed=%d",
+                        prv_trigger_kind_name(kind), s_state.active, s_state.running,
+                        s_state.awaiting_ack, s_state.completed);
+    return;
+  }
+
   ui_reveal_text_if_hidden();
   int next = prv_next_trigger_match(kind, from, to);
   PRV_DEBUG_TOUCH_LOG(
@@ -138,6 +149,29 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
   config_persist_state();
   ui_refresh();
 }
+
+#if defined(SCREENSHOT_SUPPORT)
+bool input_select_timer_for_trigger(TriggerKind kind, TriggerZone from, TriggerZone to) {
+  if (!prv_touch_selection_enabled()) {
+    return false;
+  }
+
+  ui_reveal_text_if_hidden();
+  int next = prv_next_trigger_match(kind, from, to);
+  if (next < 0) {
+    return false;
+  }
+
+  if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
+    s_state.duration_adjustment_ms = 0;
+  }
+  s_state.selected_timer = (uint8_t)next;
+  s_selected_segment = 0;
+  config_persist_state();
+  ui_refresh();
+  return true;
+}
+#endif
 
 #if defined(PBL_TOUCH)
 static void prv_touch_handler(const TouchEvent *event, void *context) {
@@ -199,6 +233,13 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
       }
       PRV_DEBUG_TOUCH_LOG("touch classified=swipe from=%s to=%s",
                           prv_zone_name(from), prv_zone_name(to));
+
+      if (!prv_touch_selection_enabled()) {
+        PRV_DEBUG_TOUCH_LOG("swipe ignored active=%d running=%d awaiting_ack=%d completed=%d",
+                            s_state.active, s_state.running, s_state.awaiting_ack,
+                            s_state.completed);
+        break;
+      }
 
       int next = prv_next_trigger_match(TRIGGER_SWIPE, from, to);
       PRV_DEBUG_TOUCH_LOG("swipe direct-match from=%s to=%s next=%d",

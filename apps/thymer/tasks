@@ -1,0 +1,14 @@
+#!/usr/bin/env -S uvx --from=rust-just just --justfile
+
+just := "uvx --from rust-just just --justfile " + justfile()
+
+@default:
+    {{ just }} --list
+
+[no-cd]
+take-screenshots platform='emery':
+    cd "{{ justfile_directory() }}" && uv run pebble kill
+    cd "{{ justfile_directory() }}" && uv run pebble wipe
+    cd "{{ justfile_directory() }}" && env THYMER_COMPILE_DEFINES=screenshot_support uv run pebble build
+    cd "{{ justfile_directory() }}" && env THYMER_COMPILE_DEFINES=screenshot_support uv run pebble install --emulator {{ platform }}
+    cd "{{ justfile_directory() }}" && node scripts/capture_screenshots.js
