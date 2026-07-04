@@ -619,7 +619,7 @@ bool timer_skip_selected_segment(void) {
 }
 
 bool timer_skip_active_segment(void) {
-  if (!s_state.active || s_state.completed || s_state.awaiting_ack) {
+  if (!s_state.active || s_state.running || s_state.completed || s_state.awaiting_ack) {
     return false;
   }
 
@@ -750,8 +750,8 @@ bool timer_handle_up_action(bool long_press) {
   const UpActionDefinition *definition = prv_current_up_action_definition(long_press);
   switch (action) {
     case UP_ACTION_SKIP:
-      if (timer_skip_active_segment()) {
-        return true;
+      if (s_state.active) {
+        return timer_skip_active_segment();
       }
       return timer_skip_selected_segment();
     case UP_ACTION_HIDE:

@@ -45,7 +45,8 @@ enum {
   TITLE_TOP = 4,
   TITLE_HEIGHT = 40,
   HINT_MAX_HEIGHT = 40,
-  SEGMENT_MAX_HEIGHT = 44,
+  SEGMENT_MAX_HEIGHT = 72,
+  SEGMENT_DESCENDER_PADDING = 4,
   TIMER_HEIGHT = 44,
   DETAIL_MAX_HEIGHT = 32,
   FOOTER_HEIGHT = 30,
@@ -226,7 +227,7 @@ bool ui_reveal_text_if_hidden(void) {
 
 bool ui_skip_hint_visible(void) {
   if (s_state.active) {
-    if (s_state.completed || s_state.awaiting_ack) {
+    if (s_state.running || s_state.completed || s_state.awaiting_ack) {
       return false;
     }
 
@@ -318,7 +319,8 @@ static void prv_layout_text_layers(void) {
   bool show_footer = !prv_text_is_empty(footer_text);
 
   int16_t content_width = bounds.size.w - (STACK_SIDE_MARGIN * 2);
-  int16_t timer_y = (bounds.size.h - TIMER_HEIGHT) / 2;
+  // NOTE: Keep the timer locked to the visual center; only the surrounding text may flex.
+  int16_t timer_y = (bounds.size.h - TIMER_HEIGHT) / 2 - 5;
   int16_t footer_y = bounds.size.h - FOOTER_HEIGHT - FOOTER_BOTTOM_MARGIN;
 
   layer_set_frame(text_layer_get_layer(s_title_layer),
@@ -340,6 +342,10 @@ static void prv_layout_text_layers(void) {
     ? prv_measure_text_height(status_text, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
                               content_width, SEGMENT_MAX_HEIGHT)
     : 0;
+  if (show_status && status_height > 0) {
+    // Keep a little extra bottom room for descenders like "y" without moving the timer.
+    status_height += SEGMENT_DESCENDER_PADDING;
+  }
   int16_t above_gap = (show_hint && show_status) ? STACK_VERTICAL_GAP : 0;
   int16_t above_height = hint_height + status_height + above_gap;
   if (above_height > available_above) {
