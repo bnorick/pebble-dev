@@ -19,6 +19,9 @@ Handled by the monorepo `tasks` runner,
 # from monorepo root
 ./tasks build thymer
 ./tasks install <ip> thymer          # install to a paired phone
+
+# or as a single command
+./tasks install <ip> thymer --build
 ```
 
 Docs site commands are also handled by `tasks`,
