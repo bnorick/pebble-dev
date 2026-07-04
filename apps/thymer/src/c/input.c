@@ -150,6 +150,29 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
   ui_refresh();
 }
 
+#if defined(SCREENSHOT_SUPPORT)
+bool input_select_timer_for_trigger(TriggerKind kind, TriggerZone from, TriggerZone to) {
+  if (!prv_touch_selection_enabled()) {
+    return false;
+  }
+
+  ui_reveal_text_if_hidden();
+  int next = prv_next_trigger_match(kind, from, to);
+  if (next < 0) {
+    return false;
+  }
+
+  if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
+    s_state.duration_adjustment_ms = 0;
+  }
+  s_state.selected_timer = (uint8_t)next;
+  s_selected_segment = 0;
+  config_persist_state();
+  ui_refresh();
+  return true;
+}
+#endif
+
 #if defined(PBL_TOUCH)
 static void prv_touch_handler(const TouchEvent *event, void *context) {
   (void)context;

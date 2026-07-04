@@ -3,10 +3,37 @@
 #
 # Feel free to customize this to your needs.
 #
+import os
 import os.path
 
 top = '.'
 out = 'build'
+SUPPORTED_COMPILE_DEFINES = {
+    'DEBUG_TOUCH',
+    'SCREENSHOT_SUPPORT',
+}
+
+
+def _thymer_compile_defines():
+    raw = os.environ.get('THYMER_COMPILE_DEFINES', '')
+    if not raw.strip():
+        return []
+
+    defines = []
+    seen = set()
+    for part in raw.split(','):
+        define = part.strip().upper()
+        if not define or define in seen:
+            continue
+        if define not in SUPPORTED_COMPILE_DEFINES:
+            raise ValueError(
+                'Unsupported THYMER_COMPILE_DEFINES entry: {}. Supported values: {}'.format(
+                    define, ', '.join(sorted(SUPPORTED_COMPILE_DEFINES))
+                )
+            )
+        seen.add(define)
+        defines.append(define)
+    return defines
 
 
 def options(ctx):
@@ -28,12 +55,15 @@ def build(ctx):
 
     build_worker = os.path.exists('worker_src')
     binaries = []
+    compile_defines = _thymer_compile_defines()
 
     cached_env = ctx.env
     for platform in ctx.env.TARGET_PLATFORMS:
         ctx.env = ctx.all_envs[platform]
-        # Uncomment for touch gesture/config debug logs in src/c/input.c and src/c/config.c.
-        # ctx.env.append_value('DEFINES', ['DEBUG_TOUCH'])
+        # Set THYMER_COMPILE_DEFINES to a case-agnostic CSV such as
+        # "debug_touch,screenshot_support" to enable optional build-time hooks.
+        if compile_defines:
+            ctx.env.append_value('DEFINES', compile_defines)
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
