@@ -7,6 +7,42 @@
 #include "ui.h"
 #include "util.h"
 
+#if defined(DEBUG_TOUCH)
+static const char *prv_trigger_kind_name(TriggerKind kind) {
+  switch (kind) {
+    case TRIGGER_TAP:
+      return "tap";
+    case TRIGGER_SWIPE:
+      return "swipe";
+    case TRIGGER_NONE:
+    default:
+      return "none";
+  }
+}
+
+static const char *prv_zone_name(TriggerZone zone) {
+  switch (zone) {
+    case ZONE_LEFT:
+      return "left";
+    case ZONE_TOP:
+      return "top";
+    case ZONE_RIGHT:
+      return "right";
+    case ZONE_BOTTOM:
+      return "bottom";
+    case ZONE_CENTER:
+      return "center";
+    case ZONE_NONE:
+    default:
+      return "none";
+  }
+}
+
+#define PRV_DEBUG_TOUCH_LOG(...) APP_LOG(APP_LOG_LEVEL_INFO, __VA_ARGS__)
+#else
+#define PRV_DEBUG_TOUCH_LOG(...) ((void)0)
+#endif
+
 static uint32_t prv_timer_key(uint8_t timer_index) {
   return PERSIST_KEY_TIMER_BASE + timer_index;
 }
@@ -59,6 +95,20 @@ static void prv_reset_pending_config(PendingConfig *config) {
   }
   prv_reset_timer_array(config->timers);
   memset(config, 0, sizeof(*config));
+}
+
+static void prv_swap_configs(TimerConfig *a, TimerConfig *b) {
+  if (!a || !b || a == b) {
+    return;
+  }
+
+  uint8_t *a_bytes = (uint8_t *)a;
+  uint8_t *b_bytes = (uint8_t *)b;
+  for (size_t i = 0; i < sizeof(TimerConfig); ++i) {
+    uint8_t tmp = a_bytes[i];
+    a_bytes[i] = b_bytes[i];
+    b_bytes[i] = tmp;
+  }
 }
 
 static bool prv_allocate_segments(TimerDefinition *timer, uint8_t segment_count) {
@@ -155,8 +205,10 @@ static bool prv_timers_equal(const TimerDefinition *a, const TimerDefinition *b)
       a->repeat != b->repeat ||
       a->iterations_enabled != b->iterations_enabled ||
       a->must_acknowledge != b->must_acknowledge ||
-      a->on_press_up != b->on_press_up ||
-      a->on_long_press_up != b->on_long_press_up ||
+      a->on_press_up.kind != b->on_press_up.kind ||
+      a->on_press_up.duration_ms != b->on_press_up.duration_ms ||
+      a->on_long_press_up.kind != b->on_long_press_up.kind ||
+      a->on_long_press_up.duration_ms != b->on_long_press_up.duration_ms ||
       a->iterations != b->iterations ||
       a->repeat_pattern_delay_ms != b->repeat_pattern_delay_ms ||
       a->acknowledge_alert_duration_s != b->acknowledge_alert_duration_s ||
@@ -308,8 +360,10 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
     timer->repeat = (timer_record.flags & TIMER_FLAG_REPEAT) != 0;
     timer->iterations_enabled = (timer_record.flags & TIMER_FLAG_ITERATIONS_ENABLED) != 0;
     timer->must_acknowledge = (timer_record.flags & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0;
-    timer->on_press_up = util_clamp_up_action(timer_record.on_press_up);
-    timer->on_long_press_up = util_clamp_up_action(timer_record.on_long_press_up);
+    timer->on_press_up.kind = util_clamp_up_action(timer_record.on_press_up);
+    timer->on_press_up.duration_ms = timer_record.on_press_up_duration_ms;
+    timer->on_long_press_up.kind = util_clamp_up_action(timer_record.on_long_press_up);
+    timer->on_long_press_up.duration_ms = timer_record.on_long_press_up_duration_ms;
     timer->iterations = timer_record.iterations;
     timer->repeat_pattern_delay_ms = timer_record.repeat_pattern_delay_ms;
     timer->acknowledge_alert_duration_s = timer_record.acknowledge_alert_duration_s;
@@ -421,8 +475,10 @@ void config_persist_config(void) {
       timer_record.flags = (timer->repeat ? TIMER_FLAG_REPEAT : 0) |
                            (timer->iterations_enabled ? TIMER_FLAG_ITERATIONS_ENABLED : 0) |
                            (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0);
-      timer_record.on_press_up = (uint8_t)timer->on_press_up;
-      timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up;
+      timer_record.on_press_up = (uint8_t)timer->on_press_up.kind;
+      timer_record.on_press_up_duration_ms = timer->on_press_up.duration_ms;
+      timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up.kind;
+      timer_record.on_long_press_up_duration_ms = timer->on_long_press_up.duration_ms;
       timer_record.iterations = timer->iterations;
       timer_record.repeat_pattern_delay_ms = timer->repeat_pattern_delay_ms;
       timer_record.acknowledge_alert_duration_s = timer->acknowledge_alert_duration_s;
@@ -561,9 +617,7 @@ static void prv_apply_config_from_pending(bool show_notice) {
   }
 
   prv_reset_runtime_for_new_config();
-  TimerConfig previous = s_config;
-  s_config = s_candidate_config;
-  s_candidate_config = previous;
+  prv_swap_configs(&s_config, &s_candidate_config);
   prv_reset_config(&s_candidate_config);
   config_persist_config();
   config_persist_state();
@@ -653,6 +707,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *ack_duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_ACK_DURATION);
     Tuple *up_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION);
     Tuple *up_long_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION);
+    Tuple *up_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION_TIME);
+    Tuple *up_long_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME);
     if (!timer_tuple) {
       return;
     }
@@ -672,10 +728,14 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       ? ((flags_tuple->value->int32 & TIMER_FLAG_ITERATIONS_ENABLED) != 0) : false;
     timer->must_acknowledge = flags_tuple
       ? ((flags_tuple->value->int32 & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0) : false;
-    timer->on_press_up = up_action_tuple
+    timer->on_press_up.kind = up_action_tuple
       ? util_clamp_up_action(up_action_tuple->value->int32) : UP_ACTION_NONE;
-    timer->on_long_press_up = up_long_action_tuple
+    timer->on_press_up.duration_ms = 0;
+    (void)util_read_uint64_tuple(up_action_time_tuple, &timer->on_press_up.duration_ms);
+    timer->on_long_press_up.kind = up_long_action_tuple
       ? util_clamp_up_action(up_long_action_tuple->value->int32) : UP_ACTION_NONE;
+    timer->on_long_press_up.duration_ms = 0;
+    (void)util_read_uint64_tuple(up_long_action_time_tuple, &timer->on_long_press_up.duration_ms);
     timer->iterations = iter_tuple
       ? (uint16_t)util_clamp_i32(iter_tuple->value->int32, 0, 65535) : 0;
     timer->repeat_pattern_delay_ms = repeat_pattern_delay_tuple
@@ -695,6 +755,12 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     if (index + 1 > s_pending_config.timer_count) {
       s_pending_config.timer_count = index + 1;
     }
+    PRV_DEBUG_TOUCH_LOG(
+      "cfg timer index=%u name=%s trigger=%s from=%s to=%s segments=%u repeat=%d iterations=%u",
+      (unsigned)index, timer->name[0] ? timer->name : "(unnamed)",
+      prv_trigger_kind_name(timer->trigger_kind), prv_zone_name(timer->trigger_from),
+      prv_zone_name(timer->trigger_to), (unsigned)timer->segment_count, timer->repeat,
+      (unsigned)timer->iterations);
     return;
   }
 
@@ -770,16 +836,6 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (op == CFG_OP_COMMIT) {
-    for (uint8_t timer_index = 0; timer_index < s_pending_config.timer_count; ++timer_index) {
-      TimerDefinition *timer = &s_pending_config.timers[timer_index];
-      for (uint8_t segment_index = 0; segment_index < timer->segment_count; ++segment_index) {
-        TimerSegment *segment = &timer->segments[segment_index];
-        if (!segment->name[0]) {
-          snprintf(segment->name, sizeof(segment->name), "step %u",
-                   (unsigned)(segment_index + 1));
-        }
-      }
-    }
     bool show_notice = !s_waiting_for_initial_config;
     prv_apply_config_from_pending(show_notice);
     ui_refresh();

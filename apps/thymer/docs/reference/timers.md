@@ -73,7 +73,7 @@ on-finished = { vibrate = "low-low-high" }
 
 ### `on-press-up` and `on-long-press-up`
 
-Optional up-button actions:
+Optional up-button actions. `skip` and `hide` can still use bare strings:
 
 - `skip`
 - `hide`
@@ -82,6 +82,24 @@ Optional up-button actions:
 on-press-up = "skip"
 on-long-press-up = "hide"
 ```
+
+You can also use an inline table for any action:
+
+```toml
+on-press-up = { action = "hide" }
+```
+
+`increment` and `decrement` require an inline table with a `time` value in the same format as segment `time`:
+
+- `increment`
+- `decrement`
+
+```toml
+on-press-up = { action = "decrement", time = "00:01:00" }
+on-long-press-up = { action = "increment", time = "00:01:00" }
+```
+
+These actions only affect an active timer run. They work while the timer is running or paused. `increment` extends the timer beyond its original configured length, and `decrement` shortens the remaining time and can finish the timer immediately when pushed past the end.
 
 ### `must-acknowledge`
 

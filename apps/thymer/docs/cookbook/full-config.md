@@ -1,65 +1,7 @@
 # Full Config
 
-This page carries the current checked-in example config. Keep it in sync with `examples/full-config.toml`.
+This page carries the current checked-in example config from `examples/full-config.toml`.
 
 ## Full example
 
-```toml
-# Shared vibration presets.
-[vibration]
-pulse-delay = 200
-acknowledgment-alert-duration = 12
-superlow = 60
-low = 100
-mid = 300
-high = 500
-
-# Named timers example. The section key becomes the default display name:
-# breathing -> Breathing
-[timers.breathing]
-repeat = true
-trigger = { tap = "top" }
-on-press-up = "skip"
-on-long-press-up = "hide"
-must-acknowledge = true
-acknowledgment-alert-duration = 5  # per-timer ack alert duration is valid too
-repeat-pattern-delay = 500
-vibrate = "superlow"
-pattern = [
-  { name = "inhale", hint = "through nose", time = 4 },
-  { name = "hold", time = 4 },
-  { name = "exhale", hint = "slow release", time = "00:00:06.2500", vibrate = { duration = 140, delay = 80 } },
-]
-
-[timers.cool-down]
-repeat = false
-trigger = { tap = "bottom" }
-pattern = [
-  { name = "settle", time = 10 },
-  { name = "breathe out", time = 8, vibrate = "low" },
-]
-
-# focus-block -> Focus Block
-[timers.focus-block]
-repeat = 4
-trigger = { swipe = "l-to-r" }
-on-finished = { vibrate = "low-low-high" }
-vibrate = { intensity = "mid" }
-pattern = [
-  { name = "focus", hint = "deep work", time = "00:25:00" },
-  { name = "short\nbreak", time = 5, vibrate = [
-    { intensity = "superlow" },
-    { duration = 200, delay = 120 },
-    { intensity = "low", delay = 120 }
-  ] },
-]
-
-[timers.long-break]
-name = "Long\nBreak"
-repeat = false
-trigger = { swipe = "c-to-b" }
-on-finished = { vibrate = [ { intensity = "low" }, { duration = 200 }, { intensity = "high" } ] }
-pattern = [
-  { name = "rest", hint = "walk away", time = "00:15:00", vibrate = { intensity = "high" } },
-]
-```
+<<< ../../examples/full-config.toml{toml}

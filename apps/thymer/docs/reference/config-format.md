@@ -2,6 +2,8 @@
 
 The current config format is intentionally narrow. A valid document is made of an optional `[vibration]` table plus one or more named timer sections.
 
+`#` comments are supported. The parser is strict about keys: if a table or inline table contains a key that is not part of the supported Thymer config shape, parsing fails.
+
 ## Top-level
 
 ```toml

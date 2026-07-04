@@ -1,0 +1,105 @@
+[vibration]
+pulse-delay = 200
+superlow = 20
+low = 100
+mid = 300
+high = 500
+
+[timers.eyesight]
+repeat = 3
+pattern = [
+  { name = "far",  time = "00:00:15", vibrate = "high" },
+  { name = "near", time = "00:00:15", vibrate = "mid-mid" },
+]
+on-finished = { vibrate = "mid-low-mid" }
+trigger = { tap = "top" }
+
+
+[timers.sharing]
+repeat = true
+must-acknowledge = true
+on-press-up = "skip"
+pattern = [
+  { name = "Kid 1", time = "00:05:00", vibrate = "high" },
+  { name = "Kid 2", time = "00:05:00", vibrate = "high" },
+]
+trigger = { tap = "left" }
+
+[timers.video-games]
+on-press-up = { action = "increment", time = "00:05:00" }
+pattern = [
+  { time = "00:15:00" },
+]
+on-finished = { vibrate="high-high-high" }
+trigger = { tap = "left" }
+
+
+[timers.square]
+repeat = true
+pattern = [
+  { name = "in",   time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:04", vibrate = "superlow" },
+  { name = "out",  time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:04", vibrate = "superlow" },
+]
+trigger = { tap = "right" }
+
+
+[timers.478]
+name = "4-7-8"
+repeat = true
+on-press-up = "hide"
+pattern = [
+  { name = "in",   time = "00:00:04", vibrate = "superlow" },
+  { name = "hold", time = "00:00:07", vibrate = "superlow-superlow" },
+  { name = "out",  time = "00:00:08", vibrate = "superlow-superlow-superlow" },
+]
+trigger = { tap = "right" }
+
+
+[timers.1-min]
+trigger = { tap = "bottom" }
+on-press-up = { action = "increment", time="00:00:30" }
+pattern = [
+  { time = "00:01:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.5-min]
+trigger = { tap = "bottom" }
+on-press-up = { action = "increment", time="00:01:00" }
+pattern = [
+  { time = "00:05:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.10-min]
+trigger = { tap = "bottom" }
+on-press-up = { action = "increment", time="00:05:00" }
+pattern = [
+  { time = "00:10:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.20-min]
+trigger = { tap = "bottom" }
+on-press-up = { action = "increment", time="00:10:00" }
+pattern = [
+  { time = "00:20:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+# changes as I test various new config/functionality
+[timers.test]
+repeat = true
+must-acknowledge = true
+on-press-up = "skip"
+pattern = [
+  { name = "one",   time = "00:00:04", vibrate = "superlow" },
+  { name = "two",   time = "00:00:04", vibrate = "superlow-superlow" },
+  { name = "three", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
+]
+trigger = { swipe = "up" }

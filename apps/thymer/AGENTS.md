@@ -3,6 +3,8 @@
 ## Project Structure & Module Organization
 `src/c/thymer.c` contains the watch app runtime: config ingestion, persistence, timer logic, wakeups, gestures, and UI. `src/pkjs/pebble-js-app.js` contains the phone-side settings UI, TOML parsing, normalization, and AppMessage transport. The timer config docs site lives in `docs/` and is built with VitePress. Use `examples/full-config.toml` as the reference config; keep it valid against the live PKJS parser, not just the README prose. Treat `build/` as generated output. Project metadata lives in `package.json`, and Pebble build rules live in `wscript`.
 
+This app lives inside the larger `pebble` monorepo at `../../`. Some repo-level assets, including GitHub workflows and Git hooks configuration, live at the monorepo root rather than inside `apps/thymer`.
+
 ## Reference Material
 Shared reference material lives in `../../reference`. Use `../../reference/c` and `../../reference/docs` for Pebble SDK behavior, drawing, animation, and API details before inventing app-local patterns. `../../reference/alloy` is only relevant when comparing against JS-first Pebble apps.
 
@@ -28,6 +30,7 @@ Practical notes learned from this repo:
 - The docs dev and preview commands intentionally bind to `127.0.0.1` rather than `0.0.0.0` because the Vite/VitePress dependency chain currently carries unresolved dev-server advisories.
 - The GitHub Pages workflow for this app lives at the git repo root, not inside this app directory: `../../.github/workflows/thymer-docs.yml`.
 - GitHub Pages is configured for the monorepo path `/pebble-dev/`; if the repo name changes, update `docs/.vitepress/config.mts` `base` and the PKJS docs link in `src/pkjs/config.js`.
+- Add new pre-commit checks in the monorepo root config at `../../.pre-commit-config.yaml`, not in `apps/thymer/.githooks` and not as ad hoc Git hook scripts. Prefer Python checkers under `scripts/` and wire them into `pre-commit` with a narrowly scoped `files` pattern.
 
 ## Coding Style & Naming Conventions
 Follow the existing style: 2-space indentation in C and JS, K&R-style braces, and short static helpers in C prefixed with `prv_`. Global/static state uses the `s_` prefix. Prefer `camelCase` for JS functions and `ALL_CAPS` for constants. Keep Pebble-facing limits explicit with named constants such as `MAX_TIMERS` and `MAX_SEGMENTS`.

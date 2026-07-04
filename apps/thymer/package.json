@@ -10,7 +10,7 @@
     "@rebble/clay": "^1.0.10"
   },
   "scripts": {
-    "check:example-sync": "uv run scripts/check_example_sync.py",
+    "check:timer-limit-sync": "python3 scripts/check_timer_limit_sync.py",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs --host 127.0.0.1"
@@ -86,6 +86,16 @@
         },
         {
           "type": "bitmap",
+          "name": "IMAGE_INCREMENT",
+          "file": "increment.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_DECREMENT",
+          "file": "decrement.png"
+        },
+        {
+          "type": "bitmap",
           "name": "IMAGE_SHOW",
           "file": "show.png"
         },
@@ -101,8 +111,18 @@
         },
         {
           "type": "bitmap",
-          "name": "IMAGE_TIMER_BACKGROUND",
-          "file": "timer-background.png"
+          "name": "IMAGE_TIMER_BG_TOP",
+          "file": "timer-bg-top.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_TIMER_BG_MID",
+          "file": "timer-bg-mid.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_TIMER_BG_BOT",
+          "file": "timer-bg-bot.png"
         }
       ]
     }

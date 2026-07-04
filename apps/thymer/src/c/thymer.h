@@ -6,7 +6,7 @@
 
 #define APP_NAME "Thymer"
 
-#define MAX_TIMERS 8
+#define MAX_TIMERS 100
 #define MAX_SEGMENTS 30
 #define MAX_NAME_LEN 40
 #define MAX_SEGMENT_NAME_LEN 40
@@ -27,7 +27,7 @@
 #define PERSIST_KEY_SEGMENT_BASE 300
 
 #define WAKEUP_COOKIE_FINISH 1
-#define CONFIG_VERSION 11
+#define CONFIG_VERSION 13
 #define BUTTON_HINT_ICON_SIZE 28
 #define BUTTON_HINT_ICON_HALF (BUTTON_HINT_ICON_SIZE / 2)
 #define BUTTON_HINT_WIDTH 30
@@ -38,7 +38,10 @@
 #define CONFIG_FLAG_BACKGROUND 0x2
 #define CONFIG_FLAG_TIMER_ACCENT 0x4
 #define FOCUS_PANEL_BITMAP_WIDTH 170
-#define FOCUS_PANEL_BITMAP_HEIGHT 90
+#define FOCUS_PANEL_TOP_HEIGHT 16
+#define FOCUS_PANEL_MID_HEIGHT 60
+#define FOCUS_PANEL_BOTTOM_HEIGHT 16
+#define FOCUS_PANEL_BITMAP_HEIGHT (FOCUS_PANEL_TOP_HEIGHT + FOCUS_PANEL_MID_HEIGHT + FOCUS_PANEL_BOTTOM_HEIGHT)
 
 #ifndef MESSAGE_KEY_CFG_ALERT
 #define MESSAGE_KEY_CFG_ALERT 10011
@@ -69,6 +72,12 @@
 #endif
 #ifndef MESSAGE_KEY_CFG_HINT
 #define MESSAGE_KEY_CFG_HINT 10020
+#endif
+#ifndef MESSAGE_KEY_CFG_UP_ACTION_TIME
+#define MESSAGE_KEY_CFG_UP_ACTION_TIME 10021
+#endif
+#ifndef MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME
+#define MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME 10022
 #endif
 
 typedef enum {
@@ -107,8 +116,15 @@ typedef enum {
   UP_ACTION_NONE = 0,
   UP_ACTION_SKIP = 1,
   UP_ACTION_HIDE = 2,
-  UP_ACTION_MUTE = 3,
+  UP_ACTION_INCREMENT = 3,
+  UP_ACTION_DECREMENT = 4,
+  UP_ACTION_MUTE = 5,
 } UpAction;
+
+typedef struct {
+  UpAction kind;
+  uint64_t duration_ms;
+} UpActionDefinition;
 
 typedef struct {
   VibeIntensity intensity;
@@ -129,8 +145,8 @@ typedef struct {
   bool repeat;
   bool iterations_enabled;
   bool must_acknowledge;
-  UpAction on_press_up;
-  UpAction on_long_press_up;
+  UpActionDefinition on_press_up;
+  UpActionDefinition on_long_press_up;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;
@@ -160,6 +176,8 @@ typedef struct __attribute__((__packed__)) {
   uint8_t flags;
   uint8_t on_press_up;
   uint8_t on_long_press_up;
+  uint64_t on_press_up_duration_ms;
+  uint64_t on_long_press_up_duration_ms;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;
@@ -201,6 +219,7 @@ typedef struct {
   uint64_t started_at_ms;
   uint64_t paused_elapsed_ms;
   uint64_t ack_started_at_ms;
+  int64_t duration_adjustment_ms;
 } TimerState;
 
 typedef struct {

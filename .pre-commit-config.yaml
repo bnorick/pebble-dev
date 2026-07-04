@@ -1,9 +1,9 @@
 repos:
   - repo: local
     hooks:
-      - id: thymer-full-config-sync
-        name: Check Thymer full-config example sync
-        entry: uv run apps/thymer/scripts/check_example_sync.py
+      - id: thymer-timer-limit-sync
+        name: Check Thymer timer limit sync
+        entry: uv run apps/thymer/scripts/check_timer_limit_sync.py
         language: system
-        files: ^apps/thymer/(examples/full-config\.toml|docs/cookbook/examples\.md)$
+        files: ^apps/thymer/(src/c/thymer\.h|src/pkjs/pebble-js-app\.js|scripts/check_timer_limit_sync\.py)$
         pass_filenames: false

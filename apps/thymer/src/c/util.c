@@ -17,7 +17,7 @@ int32_t util_clamp_i32(int32_t value, int32_t min_value, int32_t max_value) {
 }
 
 UpAction util_clamp_up_action(int32_t value) {
-  return (UpAction)util_clamp_i32(value, UP_ACTION_NONE, UP_ACTION_HIDE);
+  return (UpAction)util_clamp_i32(value, UP_ACTION_NONE, UP_ACTION_DECREMENT);
 }
 
 uint16_t util_clamp_u64_to_u16(uint64_t value, uint16_t max_value) {
