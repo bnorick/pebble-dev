@@ -55,6 +55,7 @@ const FINISH_VIBE_SEGMENT = 255;
 const DEFAULT_PULSE_DELAY = 100;
 const DEFAULT_REPEAT_PATTERN_DELAY = 500;
 const DEFAULT_ACK_ALERT_DURATION = 12;
+const MAX_TIMERS = 100;
 const DEFAULT_VIBRATION_LEVELS = {
   low: 75,
   mid: 100,
@@ -279,6 +280,26 @@ function zoneId(value) {
   }
 }
 
+function directionalSwipe(value) {
+  const normalized = String(value).trim().toLowerCase();
+  switch (normalized) {
+    case "left":
+    case "l":
+      return { from: ZONE_RIGHT, to: ZONE_LEFT };
+    case "up":
+    case "u":
+      return { from: ZONE_BOTTOM, to: ZONE_TOP };
+    case "right":
+    case "r":
+      return { from: ZONE_LEFT, to: ZONE_RIGHT };
+    case "down":
+    case "d":
+      return { from: ZONE_TOP, to: ZONE_BOTTOM };
+    default:
+      return null;
+  }
+}
+
 function normalizeTrigger(trigger) {
   if (!trigger || typeof trigger !== "object") {
     throw new Error("trigger must be an inline table");
@@ -292,6 +313,14 @@ function normalizeTrigger(trigger) {
   }
   if (trigger.swipe) {
     const swipe = String(trigger.swipe).trim().toLowerCase();
+    const directional = directionalSwipe(swipe);
+    if (directional) {
+      return {
+        kind: TRIGGER_SWIPE,
+        from: directional.from,
+        to: directional.to,
+      };
+    }
     const parts = swipe.split("-to-");
     if (parts.length !== 2) throw new Error(`invalid swipe: ${trigger.swipe}`);
     return {
@@ -537,7 +566,7 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
   const onPressUp = normalizeUpAction(raw["on-press-up"], "on-press-up", index);
   const onLongPressUp = normalizeUpAction(raw["on-long-press-up"], "on-long-press-up", index);
   return {
-    name: String(raw.name || fallbackName || `Timer ${index + 1}`),
+    name: raw.name == null ? String(fallbackName || `Timer ${index + 1}`) : String(raw.name),
     repeat: repeat,
     iterationsEnabled: repeatCount > 0,
     iterations: repeatCount,
@@ -561,7 +590,7 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
         throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} uses unsupported key: description`);
       }
       return {
-        name: String(segment.name || `step ${segmentIndex + 1}`),
+        name: segment.name == null ? "" : String(segment.name),
         hint: segment.hint == null ? "" : String(segment.hint),
         durationMs: normalizeSegmentDurationMs(segment.time),
         vibrate: segment.vibrate != null
@@ -640,6 +669,12 @@ function parseTimerToml(toml) {
     throw new Error("config must define at least one timer with [timers.<name>]");
   }
 
+  if (timers.length > MAX_TIMERS) {
+    throw new Error(
+      `config defines ${timers.length} timers but Thymer supports at most ${MAX_TIMERS}`
+    );
+  }
+
   return {
     timers: timers,
   };
@@ -651,6 +686,11 @@ function sendMessage(payload, onSuccess, onFailure) {
 
 function sendConfig(config) {
   const timers = config.timers;
+  if (timers.length > MAX_TIMERS) {
+    throw new Error(
+      `config defines ${timers.length} timers but Thymer supports at most ${MAX_TIMERS}`
+    );
+  }
   const uiSettings = loadUiSettings();
   const uiFlags = uiFlagsFromSettings(uiSettings);
   const payload = {};

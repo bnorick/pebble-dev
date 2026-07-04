@@ -45,6 +45,12 @@ or:
 trigger = { swipe = "l-to-r" }
 ```
 
+Directional aliases also work:
+
+```toml
+trigger = { swipe = "up" }
+```
+
 ## `timer N cannot use on-finished with repeat = true`
 
 Infinite timers never finish, so `on-finished` only works with one-shot and finite repeating timers.

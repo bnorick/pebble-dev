@@ -7,6 +7,42 @@
 #include "ui.h"
 #include "util.h"
 
+#if defined(DEBUG_TOUCH)
+static const char *prv_trigger_kind_name(TriggerKind kind) {
+  switch (kind) {
+    case TRIGGER_TAP:
+      return "tap";
+    case TRIGGER_SWIPE:
+      return "swipe";
+    case TRIGGER_NONE:
+    default:
+      return "none";
+  }
+}
+
+static const char *prv_zone_name(TriggerZone zone) {
+  switch (zone) {
+    case ZONE_LEFT:
+      return "left";
+    case ZONE_TOP:
+      return "top";
+    case ZONE_RIGHT:
+      return "right";
+    case ZONE_BOTTOM:
+      return "bottom";
+    case ZONE_CENTER:
+      return "center";
+    case ZONE_NONE:
+    default:
+      return "none";
+  }
+}
+
+#define PRV_DEBUG_TOUCH_LOG(...) APP_LOG(APP_LOG_LEVEL_INFO, __VA_ARGS__)
+#else
+#define PRV_DEBUG_TOUCH_LOG(...) ((void)0)
+#endif
+
 static uint32_t prv_timer_key(uint8_t timer_index) {
   return PERSIST_KEY_TIMER_BASE + timer_index;
 }
@@ -59,6 +95,20 @@ static void prv_reset_pending_config(PendingConfig *config) {
   }
   prv_reset_timer_array(config->timers);
   memset(config, 0, sizeof(*config));
+}
+
+static void prv_swap_configs(TimerConfig *a, TimerConfig *b) {
+  if (!a || !b || a == b) {
+    return;
+  }
+
+  uint8_t *a_bytes = (uint8_t *)a;
+  uint8_t *b_bytes = (uint8_t *)b;
+  for (size_t i = 0; i < sizeof(TimerConfig); ++i) {
+    uint8_t tmp = a_bytes[i];
+    a_bytes[i] = b_bytes[i];
+    b_bytes[i] = tmp;
+  }
 }
 
 static bool prv_allocate_segments(TimerDefinition *timer, uint8_t segment_count) {
@@ -561,9 +611,7 @@ static void prv_apply_config_from_pending(bool show_notice) {
   }
 
   prv_reset_runtime_for_new_config();
-  TimerConfig previous = s_config;
-  s_config = s_candidate_config;
-  s_candidate_config = previous;
+  prv_swap_configs(&s_config, &s_candidate_config);
   prv_reset_config(&s_candidate_config);
   config_persist_config();
   config_persist_state();
@@ -695,6 +743,12 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     if (index + 1 > s_pending_config.timer_count) {
       s_pending_config.timer_count = index + 1;
     }
+    PRV_DEBUG_TOUCH_LOG(
+      "cfg timer index=%u name=%s trigger=%s from=%s to=%s segments=%u repeat=%d iterations=%u",
+      (unsigned)index, timer->name[0] ? timer->name : "(unnamed)",
+      prv_trigger_kind_name(timer->trigger_kind), prv_zone_name(timer->trigger_from),
+      prv_zone_name(timer->trigger_to), (unsigned)timer->segment_count, timer->repeat,
+      (unsigned)timer->iterations);
     return;
   }
 
@@ -770,16 +824,6 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (op == CFG_OP_COMMIT) {
-    for (uint8_t timer_index = 0; timer_index < s_pending_config.timer_count; ++timer_index) {
-      TimerDefinition *timer = &s_pending_config.timers[timer_index];
-      for (uint8_t segment_index = 0; segment_index < timer->segment_count; ++segment_index) {
-        TimerSegment *segment = &timer->segments[segment_index];
-        if (!segment->name[0]) {
-          snprintf(segment->name, sizeof(segment->name), "step %u",
-                   (unsigned)(segment_index + 1));
-        }
-      }
-    }
     bool show_notice = !s_waiting_for_initial_config;
     prv_apply_config_from_pending(show_notice);
     ui_refresh();

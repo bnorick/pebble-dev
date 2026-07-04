@@ -1,5 +1,7 @@
 #!/usr/bin/env -S uvx --from=rust-just just --justfile
 
+just := "uvx --from rust-just just --justfile " + justfile()
+
 # list all available recipes
 @default:
     just --justfile tasks --list
@@ -17,7 +19,9 @@ check app='':
     if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pre-commit run --all-files; else uv run pre-commit run --all-files; fi
 
 [no-cd]
-install ip app='':
+[arg("build", long="build", value="1")]
+install ip app='' build='0':
+    if [ "{{ build }}" = "1" ]; then {{ just }} build {{ app }}; fi
     if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble install --phone {{ ip }}; else uv run pebble install --phone {{ ip }}; fi
 
 [no-cd]

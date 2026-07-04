@@ -54,6 +54,38 @@ pattern = [
 trigger = { tap = "right" }
 
 
+[timers.1-min]
+trigger = { tap = "bottom" }
+pattern = [
+  { name = "", time = "00:01:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.5-min]
+trigger = { tap = "bottom" }
+pattern = [
+  { name = "", time = "00:05:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.10-min]
+trigger = { tap = "bottom" }
+pattern = [
+  { name = "", time = "00:10:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
+[timers.20-min]
+trigger = { tap = "bottom" }
+pattern = [
+  { name = "", time = "00:20:00" }
+]
+on-finished = { vibrate = "high-high" }
+
+
 [timers.test]
 repeat = true
 must-acknowledge = true
