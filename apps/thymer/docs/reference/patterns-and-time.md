@@ -56,9 +56,38 @@ Optional per-segment vibration. See [Vibration](/reference/vibration) for the ac
 
 If the parent timer defines `vibrate`, that timer-level value becomes the default for any segment that omits `vibrate`.
 
+### `warn-at`
+
+Optional warning point or warning list, expressed as time remaining before the segment ends.
+
+These forms are valid:
+
+```toml
+warn-at = "00:00:10"
+```
+
+```toml
+warn-at = ["00:01:00", "00:00:10"]
+```
+
+```toml
+warn-at = { time = "00:00:10", vibrate = "low-low" }
+```
+
+```toml
+warn-at = [
+  { time = "00:01:00", vibrate = "mid" },
+  { time = "00:00:10", vibrate = { duration = 200, delay = 0 } }
+]
+```
+
+When a `warn-at` entry is only a time value, Thymer uses the shared warning vibration. That default is `"mid-mid-mid"` unless `[vibration].warning` overrides it. If you need a different warning vibration for a specific warning, use the inline table form with `time` and `vibrate`.
+
 ## Validation rules
 
 - `time` is required
 - numeric `time` must be a safe non-negative integer number of seconds
 - string `time` must use the supported clock format
 - the final duration must be at least 1 millisecond
+- every `warn-at` entry must be at least 1 millisecond and strictly shorter than the segment time
+- each segment supports at most 4 `warn-at` entries

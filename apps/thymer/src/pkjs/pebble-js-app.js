@@ -32,6 +32,8 @@ const KEY_CFG_UP_ACTION_TIME = 10021;
 const KEY_CFG_UP_LONG_ACTION_TIME = 10022;
 const KEY_CFG_SELECT_LONG_ACTION = 10023;
 const KEY_CFG_SELECT_LONG_ACTION_TIME = 10024;
+const KEY_CFG_WARN = 10025;
+const KEY_CFG_WARN_TIME = 10026;
 
 const CFG_OP_BEGIN = 1;
 const CFG_OP_TIMER = 2;
@@ -40,6 +42,7 @@ const CFG_OP_VIBRATE = 4;
 const CFG_OP_COMMIT = 5;
 const CFG_OP_ERROR = 6;
 const CFG_OP_UI = 7;
+const CFG_OP_WARN = 8;
 
 const TRIGGER_NONE = 0;
 const TRIGGER_TAP = 1;
@@ -60,6 +63,8 @@ const DEFAULT_PULSE_DELAY = 100;
 const DEFAULT_REPEAT_PATTERN_DELAY = 500;
 const DEFAULT_ACK_ALERT_DURATION = 12;
 const MAX_TIMERS = 100;
+const MAX_WARN_ATS = 4;
+const DEFAULT_WARNING_VIBRATE = "mid-mid-mid";
 const DEFAULT_VIBRATION_LEVELS = {
   low: 75,
   mid: 100,
@@ -71,6 +76,8 @@ const UP_ACTION_SKIP = 1;
 const UP_ACTION_HIDE = 2;
 const UP_ACTION_INCREMENT = 3;
 const UP_ACTION_DECREMENT = 4;
+
+const SEGMENT_KEYS = ["hint", "time", "vibrate", "warn-at"];
 
 function parseUpActionKind(raw, fieldName, index) {
   switch (String(raw == null ? "" : raw).trim().toLowerCase()) {
@@ -378,6 +385,7 @@ function parseVibrationConfig(raw) {
       pulseDelay: DEFAULT_PULSE_DELAY,
       acknowledgeAlertDuration: DEFAULT_ACK_ALERT_DURATION,
       levels: Object.assign({}, DEFAULT_VIBRATION_LEVELS),
+      warning: DEFAULT_WARNING_VIBRATE,
     };
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -387,6 +395,7 @@ function parseVibrationConfig(raw) {
   const levels = Object.assign({}, DEFAULT_VIBRATION_LEVELS);
   let pulseDelay = DEFAULT_PULSE_DELAY;
   let acknowledgeAlertDuration = DEFAULT_ACK_ALERT_DURATION;
+  let warning = DEFAULT_WARNING_VIBRATE;
   for (const key of Object.keys(raw)) {
     if (key === "pulse-delay") {
       pulseDelay = Math.max(0, Number(raw[key]) | 0);
@@ -394,6 +403,10 @@ function parseVibrationConfig(raw) {
     }
     if (key === "acknowledgment-alert-duration") {
       acknowledgeAlertDuration = normalizeAckAlertDuration(raw[key], 0);
+      continue;
+    }
+    if (key === "warning") {
+      warning = raw[key];
       continue;
     }
 
@@ -409,7 +422,7 @@ function parseVibrationConfig(raw) {
     levels[normalizedKey] = duration;
   }
 
-  return { pulseDelay, acknowledgeAlertDuration, levels };
+  return { pulseDelay, acknowledgeAlertDuration, levels, warning };
 }
 
 function intensityDuration(value, vibrationConfig) {
@@ -553,6 +566,84 @@ function normalizeVibrate(raw, vibrationConfig) {
   return [normalizeVibrateStep(raw, vibrationConfig)];
 }
 
+function defaultWarningVibrate(vibrationConfig) {
+  return normalizeVibrate(vibrationConfig.warning, vibrationConfig);
+}
+
+function normalizeWarnAtEntry(raw, vibrationConfig, context) {
+  if (typeof raw === "string" || typeof raw === "number") {
+    return {
+      timeBeforeEndMs: normalizeSegmentDurationMs(raw),
+      vibrate: defaultWarningVibrate(vibrationConfig),
+    };
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${context} must be a time value or inline table`);
+  }
+  assertAllowedKeys(raw, ["time", "vibrate"], context);
+  if (raw.time == null) {
+    throw new Error(`${context} must define time`);
+  }
+  return {
+    timeBeforeEndMs: normalizeSegmentDurationMs(raw.time),
+    vibrate: raw.vibrate != null
+      ? normalizeVibrate(raw.vibrate, vibrationConfig)
+      : defaultWarningVibrate(vibrationConfig),
+  };
+}
+
+function normalizeWarnAt(raw, segmentDurationMs, vibrationConfig, context) {
+  if (raw == null) {
+    return [];
+  }
+
+  const items = Array.isArray(raw) ? raw : [raw];
+  if (items.length > MAX_WARN_ATS) {
+    throw new Error(`${context} supports at most ${MAX_WARN_ATS} entries`);
+  }
+
+  return items.map(function(item, index) {
+    const entry = normalizeWarnAtEntry(item, vibrationConfig, `${context} ${index + 1}`);
+    if (entry.timeBeforeEndMs < 1 || entry.timeBeforeEndMs >= segmentDurationMs) {
+      throw new Error(`${context} ${index + 1} must be less than the segment time`);
+    }
+    return entry;
+  }).sort(function(left, right) {
+    return right.timeBeforeEndMs - left.timeBeforeEndMs;
+  });
+}
+
+function normalizeSegment(raw, context, defaultSegment, vibrationConfig) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${context} must be inline table`);
+  }
+
+  assertAllowedKeys(
+    raw,
+    ["name"].concat(SEGMENT_KEYS),
+    context
+  );
+
+  const durationSource = raw.time != null ? raw.time : defaultSegment.time;
+  const durationMs = normalizeSegmentDurationMs(durationSource);
+  const segmentVibrate = raw.vibrate != null
+    ? normalizeVibrate(raw.vibrate, vibrationConfig)
+    : defaultSegment.vibrate;
+
+  return {
+    name: raw.name == null ? "" : String(raw.name),
+    hint: raw.hint != null ? String(raw.hint) : defaultSegment.hint,
+    durationMs: durationMs,
+    vibrate: segmentVibrate,
+    warnAt: normalizeWarnAt(
+      raw["warn-at"] != null ? raw["warn-at"] : defaultSegment.warnAt,
+      durationMs,
+      vibrationConfig,
+      `${context} warn-at`
+    ),
+  };
+}
+
 function normalizeFinishVibrate(raw, index, vibrationConfig) {
   if (raw == null) {
     return [];
@@ -609,7 +700,10 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     "repeat",
     "trigger",
     "pattern",
+    "hint",
+    "time",
     "vibrate",
+    "warn-at",
     "on-finished",
     "on-press-up",
     "on-long-press-up",
@@ -618,8 +712,14 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     "repeat-pattern-delay",
     "acknowledgment-alert-duration",
   ], `timer ${index + 1}`);
-  if (!Array.isArray(raw.pattern) || raw.pattern.length === 0) {
-    throw new Error(`timer ${index + 1} is missing pattern`);
+  if (raw.time != null && raw.pattern != null) {
+    throw new Error(`timer ${index + 1} cannot define both time and pattern`);
+  }
+  if (raw.pattern != null && (!Array.isArray(raw.pattern) || raw.pattern.length === 0)) {
+    throw new Error(`timer ${index + 1} pattern must be a non-empty array`);
+  }
+  if (raw.time == null && raw.pattern == null) {
+    throw new Error(`timer ${index + 1} must define time or pattern`);
   }
   const rawRepeat = raw.repeat;
   const repeatForever = rawRepeat === true;
@@ -627,6 +727,12 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
   const repeat = repeatForever || repeatCount > 0;
   const finishVibrate = normalizeFinishVibrate(raw["on-finished"], index, vibrationConfig);
   const defaultVibrate = normalizeVibrate(raw.vibrate, vibrationConfig);
+  const defaultSegment = {
+    hint: raw.hint == null ? "" : String(raw.hint),
+    time: raw.time,
+    vibrate: defaultVibrate,
+    warnAt: raw["warn-at"],
+  };
   if (repeatForever && finishVibrate.length > 0) {
     throw new Error(`timer ${index + 1} cannot use on-finished with repeat = true`);
   }
@@ -659,24 +765,16 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     ),
     finishVibrate: finishVibrate,
     trigger: normalizeTrigger(raw.trigger),
-    pattern: raw.pattern.map(function(segment, segmentIndex) {
-      if (!segment || typeof segment !== "object") {
-        throw new Error(`timer ${index + 1} pattern ${segmentIndex + 1} must be inline table`);
-      }
-      assertAllowedKeys(
-        segment,
-        ["name", "hint", "time", "vibrate"],
-        `timer ${index + 1} pattern ${segmentIndex + 1}`
-      );
-      return {
-        name: segment.name == null ? "" : String(segment.name),
-        hint: segment.hint == null ? "" : String(segment.hint),
-        durationMs: normalizeSegmentDurationMs(segment.time),
-        vibrate: segment.vibrate != null
-          ? normalizeVibrate(segment.vibrate, vibrationConfig)
-          : defaultVibrate,
-      };
-    }),
+    pattern: raw.pattern != null
+      ? raw.pattern.map(function(segment, segmentIndex) {
+        return normalizeSegment(
+          segment,
+          `timer ${index + 1} pattern ${segmentIndex + 1}`,
+          defaultSegment,
+          vibrationConfig
+        );
+      })
+      : [normalizeSegment({}, `timer ${index + 1}`, defaultSegment, vibrationConfig)],
   };
 }
 
@@ -840,8 +938,51 @@ function sendSegmentAt(timers, timerIndex, segmentIndex) {
   payload[KEY_CFG_TEXT] = segment.name;
   payload[KEY_CFG_HINT] = segment.hint;
   payload[KEY_CFG_ALERT] = segment.vibrate.length;
+  payload[KEY_CFG_WARN] = segment.warnAt.length;
   sendMessage(payload, function() {
+    sendWarnAt(timers, timerIndex, segmentIndex, 0);
+  });
+}
+
+function sendWarnAt(timers, timerIndex, segmentIndex, warnIndex) {
+  const segment = timers[timerIndex].pattern[segmentIndex];
+  if (warnIndex >= segment.warnAt.length) {
     sendVibrateAt(timers, timerIndex, segmentIndex, 0);
+    return;
+  }
+
+  const warnAt = segment.warnAt[warnIndex];
+  const payload = {};
+  payload[KEY_CFG_OP] = CFG_OP_WARN;
+  payload[KEY_CFG_TIMER] = timerIndex;
+  payload[KEY_CFG_SEGMENT] = segmentIndex;
+  payload[KEY_CFG_WARN] = warnIndex;
+  payload[KEY_CFG_WARN_TIME] = encodeUint64Bytes(warnAt.timeBeforeEndMs);
+  payload[KEY_CFG_ALERT] = warnAt.vibrate.length;
+  sendMessage(payload, function() {
+    sendWarnVibrateAt(timers, timerIndex, segmentIndex, warnIndex, 0);
+  });
+}
+
+function sendWarnVibrateAt(timers, timerIndex, segmentIndex, warnIndex, vibeIndex) {
+  const warnAt = timers[timerIndex].pattern[segmentIndex].warnAt[warnIndex];
+  if (vibeIndex >= warnAt.vibrate.length) {
+    sendWarnAt(timers, timerIndex, segmentIndex, warnIndex + 1);
+    return;
+  }
+
+  const vibe = warnAt.vibrate[vibeIndex];
+  const payload = {};
+  payload[KEY_CFG_OP] = CFG_OP_VIBRATE;
+  payload[KEY_CFG_TIMER] = timerIndex;
+  payload[KEY_CFG_SEGMENT] = segmentIndex;
+  payload[KEY_CFG_WARN] = warnIndex;
+  payload[KEY_CFG_ALERT] = vibeIndex;
+  payload[KEY_CFG_INTENSITY] = vibe.intensity;
+  payload[KEY_CFG_DURATION] = vibe.duration;
+  payload[KEY_CFG_DELAY] = vibe.delay;
+  sendMessage(payload, function() {
+    sendWarnVibrateAt(timers, timerIndex, segmentIndex, warnIndex, vibeIndex + 1);
   });
 }
 

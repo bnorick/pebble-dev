@@ -9,6 +9,7 @@ The current config format is intentionally narrow. A valid document is made of a
 ```toml
 [vibration]
 pulse-delay = 200
+warning = "mid-mid-mid"
 low = 90
 mid = 120
 high = 180
@@ -30,6 +31,7 @@ Optional shared vibration settings:
 - can define extra named levels such as `superlow`
 - can set `pulse-delay`
 - can set `acknowledgment-alert-duration`
+- can set `warning` for the default `warn-at` vibration
 
 ### `[timers.<name>]`
 
@@ -37,4 +39,4 @@ Required named timer sections:
 
 - `<name>` is used as the default display name when `name` is omitted
 - at least one timer is required
-- each timer must define `trigger` and `pattern`
+- each timer must define `trigger` and either `time` or `pattern`

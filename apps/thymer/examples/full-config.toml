@@ -2,6 +2,7 @@
 [vibration]
 pulse-delay = 200
 acknowledgment-alert-duration = 12
+warning = "low-low-low"
 superlow = 60
 low = 100
 mid = 300
@@ -19,14 +20,16 @@ acknowledgment-alert-duration = 5  # per-timer ack alert duration is valid too
 repeat-pattern-delay = 500
 vibrate = "superlow"
 pattern = [
-  { name = "inhale", hint = "through nose", time = 4 },
-  { name = "hold", time = 4 },
+  { name = "inhale", hint = "through nose", time = 4, warn-at = "00:00:01" },
+  { name = "hold", time = 4, warn-at = ["00:00:02", "00:00:01"] },
   { name = "exhale", hint = "slow release", time = "00:00:06.2500", vibrate = { duration = 140, delay = 80 } },
 ]
 
 [timers.cool-down]
 repeat = false
 trigger = { tap = "bottom" }
+vibrate = "superlow"
+warn-at = { time = "00:00:02", vibrate = "low" }
 pattern = [
   { name = "settle", time = 10 },
   { name = "breathe out", time = 8, vibrate = "low" },
@@ -40,11 +43,14 @@ trigger = { swipe = "l-to-r" }
 on-finished = { vibrate = "low-low-high" }
 vibrate = { intensity = "mid" }
 pattern = [
-  { name = "focus", hint = "deep work", time = "00:25:00" },
+  { name = "focus", hint = "deep work", time = "00:25:00", warn-at = { time = "00:05:00", vibrate = "low-low" } },
   { name = "short\nbreak", time = 5, vibrate = [
     { intensity = "superlow" },
     { duration = 200, delay = 120 },
     { intensity = "low", delay = 120 }
+  ], warn-at = [
+    { time = "00:00:03", vibrate = "superlow" },
+    { time = "00:00:01", vibrate = { duration = 250, delay = 0 } }
   ] },
 ]
 
@@ -55,6 +61,7 @@ trigger = { swipe = "c-to-b" }
 on-press-up = { action = "decrement", time = "00:01:00" }
 on-long-press-up = { action = "increment", time = "00:01:00" }
 on-finished = { vibrate = [ { intensity = "low" }, { duration = 200 }, { intensity = "high" } ] }
-pattern = [
-  { name = "rest", hint = "walk away", time = "00:15:00", vibrate = { intensity = "high" } },
-]
+hint = "walk away"
+time = "00:15:00"
+vibrate = { intensity = "high" }
+warn-at = "00:01:00"

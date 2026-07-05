@@ -20,13 +20,21 @@ trigger = { swipe = "l-to-r" }
 
 ### `pattern`
 
-Required non-empty array of inline tables:
+Required for multi-segment timers. Mutually exclusive with timer-level `time`.
 
 ```toml
 pattern = [
   { name = "focus", time = "00:25:00" },
   { name = "break", time = "00:05:00", vibrate = "low" },
 ]
+```
+
+### `time`
+
+Required for single-segment timers that omit `pattern`.
+
+```toml
+time = "00:15:00"
 ```
 
 ## Optional fields
@@ -55,13 +63,31 @@ repeat = 4
 
 ### `vibrate`
 
-Optional default vibration for every segment in the timer.
+Optional default vibration for every segment in the timer, and the segment vibration for single-segment timers that use timer-level `time`.
 
 ```toml
 vibrate = "mid"
 ```
 
 Any segment with its own `vibrate` value overrides this default.
+
+### `hint`
+
+Optional default hint for every segment in the timer, and the single segment hint when `pattern` is omitted.
+
+```toml
+hint = "deep work"
+```
+
+### `warn-at`
+
+Optional default warning point or warning list for every segment in the timer, and the single segment warning when `pattern` is omitted.
+
+```toml
+warn-at = "00:01:00"
+```
+
+Any segment with its own `warn-at` value overrides this default.
 
 ### `on-finished`
 

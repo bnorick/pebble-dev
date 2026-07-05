@@ -65,6 +65,22 @@ static void prv_copy_vibe_from_persist(VibeStep *dst, const PersistVibeStep *src
   dst->delay_ms = src->delay_ms;
 }
 
+static void prv_copy_warning_to_persist(PersistSegmentWarning *dst, const SegmentWarning *src) {
+  dst->time_before_end_ms = src->time_before_end_ms;
+  dst->vibe_count = src->vibe_count;
+  for (uint8_t i = 0; i < src->vibe_count && i < MAX_VIBE_STEPS; ++i) {
+    prv_copy_vibe_to_persist(&dst->vibes[i], &src->vibes[i]);
+  }
+}
+
+static void prv_copy_warning_from_persist(SegmentWarning *dst, const PersistSegmentWarning *src) {
+  dst->time_before_end_ms = src->time_before_end_ms;
+  dst->vibe_count = (uint8_t)util_clamp_i32(src->vibe_count, 0, MAX_VIBE_STEPS);
+  for (uint8_t i = 0; i < dst->vibe_count; ++i) {
+    prv_copy_vibe_from_persist(&dst->vibes[i], &src->vibes[i]);
+  }
+}
+
 static void prv_reset_timer_definition(TimerDefinition *timer) {
   if (!timer) {
     return;
@@ -187,7 +203,8 @@ static bool prv_timer_segments_equal(const TimerDefinition *a, const TimerDefini
     if (strncmp(left->name, right->name, MAX_SEGMENT_NAME_LEN) != 0 ||
         strncmp(left->hint, right->hint, MAX_HINT_LEN) != 0 ||
         left->duration_ms != right->duration_ms ||
-        left->vibe_count != right->vibe_count) {
+        left->vibe_count != right->vibe_count ||
+        left->warn_count != right->warn_count) {
       return false;
     }
     for (uint8_t vibe_index = 0; vibe_index < left->vibe_count; ++vibe_index) {
@@ -195,6 +212,21 @@ static bool prv_timer_segments_equal(const TimerDefinition *a, const TimerDefini
           left->vibes[vibe_index].duration_ms != right->vibes[vibe_index].duration_ms ||
           left->vibes[vibe_index].delay_ms != right->vibes[vibe_index].delay_ms) {
         return false;
+      }
+    }
+    for (uint8_t warn_index = 0; warn_index < left->warn_count; ++warn_index) {
+      const SegmentWarning *left_warn = &left->warns[warn_index];
+      const SegmentWarning *right_warn = &right->warns[warn_index];
+      if (left_warn->time_before_end_ms != right_warn->time_before_end_ms ||
+          left_warn->vibe_count != right_warn->vibe_count) {
+        return false;
+      }
+      for (uint8_t vibe_index = 0; vibe_index < left_warn->vibe_count; ++vibe_index) {
+        if (left_warn->vibes[vibe_index].intensity != right_warn->vibes[vibe_index].intensity ||
+            left_warn->vibes[vibe_index].duration_ms != right_warn->vibes[vibe_index].duration_ms ||
+            left_warn->vibes[vibe_index].delay_ms != right_warn->vibes[vibe_index].delay_ms) {
+          return false;
+        }
       }
     }
   }
@@ -404,12 +436,13 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
         goto fail;
       }
 
-      if (segment_record.vibe_count > MAX_VIBE_STEPS) {
+      if (segment_record.vibe_count > MAX_VIBE_STEPS ||
+          segment_record.warn_count > MAX_WARN_ATS) {
         snprintf(reason, reason_len, "Seg %u/%u invalid vibe_count",
                  (unsigned)timer_index, (unsigned)segment_index);
-        APP_LOG(APP_LOG_LEVEL_ERROR, "persist segment %u/%u invalid vibe_count=%u",
+        APP_LOG(APP_LOG_LEVEL_ERROR, "persist segment %u/%u invalid vibe_count=%u warn_count=%u",
                 (unsigned)timer_index, (unsigned)segment_index,
-                (unsigned)segment_record.vibe_count);
+                (unsigned)segment_record.vibe_count, (unsigned)segment_record.warn_count);
         goto fail;
       }
 
@@ -418,8 +451,12 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
       util_copy_string(segment->hint, sizeof(segment->hint), segment_record.hint);
       segment->duration_ms = segment_record.duration_ms;
       segment->vibe_count = segment_record.vibe_count;
+      segment->warn_count = segment_record.warn_count;
       for (uint8_t i = 0; i < segment->vibe_count; ++i) {
         prv_copy_vibe_from_persist(&segment->vibes[i], &segment_record.vibes[i]);
+      }
+      for (uint8_t i = 0; i < segment->warn_count; ++i) {
+        prv_copy_warning_from_persist(&segment->warns[i], &segment_record.warns[i]);
       }
     }
   }
@@ -510,8 +547,12 @@ void config_persist_config(void) {
         util_copy_string(segment_record.hint, sizeof(segment_record.hint), segment->hint);
         segment_record.duration_ms = segment->duration_ms;
         segment_record.vibe_count = segment->vibe_count;
+        segment_record.warn_count = segment->warn_count;
         for (uint8_t i = 0; i < segment->vibe_count; ++i) {
           prv_copy_vibe_to_persist(&segment_record.vibes[i], &segment->vibes[i]);
+        }
+        for (uint8_t i = 0; i < segment->warn_count; ++i) {
+          prv_copy_warning_to_persist(&segment_record.warns[i], &segment->warns[i]);
         }
         persist_write_data(key, &segment_record, sizeof(segment_record));
       }
@@ -802,6 +843,7 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *text_tuple = dict_find(iter, MESSAGE_KEY_CFG_TEXT);
     Tuple *hint_tuple = dict_find(iter, MESSAGE_KEY_CFG_HINT);
     Tuple *alert_tuple = dict_find(iter, MESSAGE_KEY_CFG_ALERT);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
     if (!timer_tuple || !segment_tuple || !duration_tuple) {
       return;
     }
@@ -822,12 +864,49 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     segment->duration_ms = duration_ms;
     segment->vibe_count = alert_tuple
       ? (uint8_t)util_clamp_i32(alert_tuple->value->int32, 0, MAX_VIBE_STEPS) : 0;
+    segment->warn_count = warn_tuple
+      ? (uint8_t)util_clamp_i32(warn_tuple->value->int32, 0, MAX_WARN_ATS) : 0;
     if (text_tuple && text_tuple->type == TUPLE_CSTRING) {
       util_copy_string(segment->name, sizeof(segment->name), text_tuple->value->cstring);
     }
     if (hint_tuple && hint_tuple->type == TUPLE_CSTRING) {
       util_copy_string(segment->hint, sizeof(segment->hint), hint_tuple->value->cstring);
     }
+    return;
+  }
+
+  if (op == CFG_OP_WARN) {
+    Tuple *timer_tuple = dict_find(iter, MESSAGE_KEY_CFG_TIMER);
+    Tuple *segment_tuple = dict_find(iter, MESSAGE_KEY_CFG_SEGMENT);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
+    Tuple *warn_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN_TIME);
+    Tuple *alert_tuple = dict_find(iter, MESSAGE_KEY_CFG_ALERT);
+    if (!timer_tuple || !segment_tuple || !warn_tuple || !warn_time_tuple) {
+      return;
+    }
+    uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
+    uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
+    uint8_t warn_index = (uint8_t)warn_tuple->value->int32;
+    if (timer_index >= MAX_TIMERS || warn_index >= MAX_WARN_ATS) {
+      return;
+    }
+    TimerDefinition *timer = &s_pending_config.timers[timer_index];
+    if (segment_index >= timer->segment_count || !timer->segments) {
+      return;
+    }
+    TimerSegment *segment = &timer->segments[segment_index];
+    if (warn_index >= segment->warn_count) {
+      return;
+    }
+    SegmentWarning *warn = &segment->warns[warn_index];
+    uint64_t time_before_end_ms = 0;
+    if (!util_read_uint64_tuple(warn_time_tuple, &time_before_end_ms) ||
+        time_before_end_ms < 1 || time_before_end_ms >= segment->duration_ms) {
+      return;
+    }
+    warn->time_before_end_ms = time_before_end_ms;
+    warn->vibe_count = alert_tuple
+      ? (uint8_t)util_clamp_i32(alert_tuple->value->int32, 0, MAX_VIBE_STEPS) : 0;
     return;
   }
 
@@ -838,6 +917,7 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *intensity_tuple = dict_find(iter, MESSAGE_KEY_CFG_INTENSITY);
     Tuple *duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_DURATION);
     Tuple *delay_tuple = dict_find(iter, MESSAGE_KEY_CFG_DELAY);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
     if (!timer_tuple || !segment_tuple || !alert_tuple || !intensity_tuple || !duration_tuple) {
       return;
     }
@@ -848,7 +928,23 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       return;
     }
     VibeStep *step = NULL;
-    if (segment_index == FINISH_VIBE_SEGMENT) {
+    if (warn_tuple) {
+      uint8_t warn_index = (uint8_t)warn_tuple->value->int32;
+      TimerDefinition *timer = &s_pending_config.timers[timer_index];
+      if (warn_index >= MAX_WARN_ATS ||
+          segment_index >= timer->segment_count || !timer->segments) {
+        return;
+      }
+      TimerSegment *segment = &timer->segments[segment_index];
+      if (warn_index >= segment->warn_count) {
+        return;
+      }
+      SegmentWarning *warn = &segment->warns[warn_index];
+      if (alert_index >= warn->vibe_count) {
+        return;
+      }
+      step = &warn->vibes[alert_index];
+    } else if (segment_index == FINISH_VIBE_SEGMENT) {
       step = &s_pending_config.timers[timer_index].finish_vibes[alert_index];
     } else {
       TimerDefinition *timer = &s_pending_config.timers[timer_index];

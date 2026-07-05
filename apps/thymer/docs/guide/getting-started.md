@@ -15,17 +15,15 @@ Every config needs at least one named timer section under `timers.*`.
 ```toml
 [timers.focus]
 trigger = { tap = "top" }
-pattern = [
-  { name = "focus", time = "00:25:00" },
-  { name = "break", time = "00:05:00", vibrate = "low" },
-]
+time = "00:25:00"
+warn-at = "00:05:00"
 ```
 
 That example uses:
 
 - a named timer key, `focus`
 - a required `trigger`
-- a required `pattern`
+- a required `time` or `pattern`
 - `time` values written as `HH:MM:SS`
 
 ## What lives at the top level
