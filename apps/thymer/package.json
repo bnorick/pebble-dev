@@ -49,7 +49,9 @@
       "CFG_UP_ACTION",
       "CFG_UP_LONG_ACTION",
       "CFG_UI_FLAGS",
-      "CFG_ACK_DURATION"
+      "CFG_ACK_DURATION",
+      "CFG_SELECT_LONG_ACTION",
+      "CFG_SELECT_LONG_ACTION_TIME"
     ],
     "resources": {
       "media": [

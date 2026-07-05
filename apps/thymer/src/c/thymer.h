@@ -27,7 +27,7 @@
 #define PERSIST_KEY_SEGMENT_BASE 300
 
 #define WAKEUP_COOKIE_FINISH 1
-#define CONFIG_VERSION 13
+#define CONFIG_VERSION 14
 #define BUTTON_HINT_ICON_SIZE 28
 #define BUTTON_HINT_ICON_HALF (BUTTON_HINT_ICON_SIZE / 2)
 #define BUTTON_HINT_WIDTH 30
@@ -78,6 +78,12 @@
 #endif
 #ifndef MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME
 #define MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME 10022
+#endif
+#ifndef MESSAGE_KEY_CFG_SELECT_LONG_ACTION
+#define MESSAGE_KEY_CFG_SELECT_LONG_ACTION 10023
+#endif
+#ifndef MESSAGE_KEY_CFG_SELECT_LONG_ACTION_TIME
+#define MESSAGE_KEY_CFG_SELECT_LONG_ACTION_TIME 10024
 #endif
 
 typedef enum {
@@ -147,6 +153,7 @@ typedef struct {
   bool must_acknowledge;
   UpActionDefinition on_press_up;
   UpActionDefinition on_long_press_up;
+  UpActionDefinition on_long_press_select;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;
@@ -176,8 +183,10 @@ typedef struct __attribute__((__packed__)) {
   uint8_t flags;
   uint8_t on_press_up;
   uint8_t on_long_press_up;
+  uint8_t on_long_press_select;
   uint64_t on_press_up_duration_ms;
   uint64_t on_long_press_up_duration_ms;
+  uint64_t on_long_press_select_duration_ms;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;

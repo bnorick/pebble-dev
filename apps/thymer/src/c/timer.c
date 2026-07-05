@@ -8,6 +8,11 @@
 static AppTimer *s_refresh_timer;
 static AppTimer *s_ack_timer;
 
+enum {
+  VISIBLE_REFRESH_MS = 100,
+  HIDDEN_FALLBACK_REFRESH_MS = 1000,
+};
+
 static uint32_t prv_scaled_vibe_duration_ms(VibeIntensity intensity, uint16_t duration_ms) {
   uint32_t base = duration_ms ? duration_ms : 100;
   switch (intensity) {
@@ -169,6 +174,7 @@ void timer_play_segment_vibration(const TimerSegment *segment) {
 }
 
 static void prv_ack_timer_callback(void *context);
+static uint32_t prv_next_refresh_delay_ms(void);
 
 static void prv_schedule_ack_repeat(const TimerSegment *segment) {
   if (!segment || !s_state.awaiting_ack || s_state.ack_silenced) {
@@ -455,11 +461,59 @@ static void prv_refresh_timer_callback(void *context) {
   (void)context;
   s_refresh_timer = NULL;
   timer_update_running_state();
-  ui_refresh();
-
-  if (s_state.running) {
-    s_refresh_timer = app_timer_register(100, prv_refresh_timer_callback, NULL);
+  if (!ui_text_hidden()) {
+    ui_refresh();
   }
+  timer_reschedule_refresh_timer();
+}
+
+static uint32_t prv_clamp_delay_ms(uint64_t delay_ms) {
+  if (delay_ms == 0) {
+    return 0;
+  }
+  return delay_ms > UINT32_MAX ? UINT32_MAX : (uint32_t)delay_ms;
+}
+
+static uint32_t prv_hidden_refresh_delay_ms(void) {
+  const TimerDefinition *timer = timer_active_timer();
+  if (!timer) {
+    return 0;
+  }
+
+  TimerSnapshot snap = timer_current_snapshot();
+  if (!snap.valid || snap.completed) {
+    return 0;
+  }
+
+  uint8_t next_segment = 0;
+  uint16_t next_iteration = 0;
+  uint64_t next_elapsed_ms = 0;
+  if (timer_next_segment_after(timer, &snap, &next_segment, &next_iteration, &next_elapsed_ms) &&
+      next_elapsed_ms > snap.elapsed_ms) {
+    (void)next_segment;
+    (void)next_iteration;
+    return prv_clamp_delay_ms(next_elapsed_ms - snap.elapsed_ms);
+  }
+
+  if (timer_has_finite_end(timer) && snap.total_remaining_ms > 0) {
+    return prv_clamp_delay_ms(snap.total_remaining_ms);
+  }
+
+  if (snap.phase_remaining_ms > 0) {
+    return prv_clamp_delay_ms(snap.phase_remaining_ms);
+  }
+
+  return HIDDEN_FALLBACK_REFRESH_MS;
+}
+
+static uint32_t prv_next_refresh_delay_ms(void) {
+  if (!s_state.running) {
+    return 0;
+  }
+  if (!ui_text_hidden()) {
+    return VISIBLE_REFRESH_MS;
+  }
+  return prv_hidden_refresh_delay_ms();
 }
 
 void timer_ensure_refresh_timer(void) {
@@ -468,8 +522,17 @@ void timer_ensure_refresh_timer(void) {
     return;
   }
   if (!s_refresh_timer) {
-    s_refresh_timer = app_timer_register(100, prv_refresh_timer_callback, NULL);
+    uint32_t delay_ms = prv_next_refresh_delay_ms();
+    if (delay_ms == 0) {
+      delay_ms = HIDDEN_FALLBACK_REFRESH_MS;
+    }
+    s_refresh_timer = app_timer_register(delay_ms, prv_refresh_timer_callback, NULL);
   }
+}
+
+void timer_reschedule_refresh_timer(void) {
+  timer_cancel_refresh_timer();
+  timer_ensure_refresh_timer();
 }
 
 void timer_cancel_refresh_timer(void) {
@@ -694,6 +757,14 @@ static const UpActionDefinition *prv_current_up_action_definition(bool long_pres
   return long_press ? &timer->on_long_press_up : &timer->on_press_up;
 }
 
+static const UpActionDefinition *prv_current_select_long_action_definition(void) {
+  const TimerDefinition *timer = s_state.active ? timer_active_timer() : timer_selected_timer();
+  if (!timer) {
+    return NULL;
+  }
+  return &timer->on_long_press_select;
+}
+
 static bool prv_adjust_active_timer(uint64_t delta_ms, bool increment) {
   if (s_state.active && (s_state.completed || s_state.awaiting_ack)) {
     return false;
@@ -751,6 +822,14 @@ UpAction timer_current_up_action(bool long_press) {
   return action->kind;
 }
 
+UpAction timer_current_select_long_action(void) {
+  const UpActionDefinition *action = prv_current_select_long_action_definition();
+  if (!action) {
+    return UP_ACTION_NONE;
+  }
+  return action->kind;
+}
+
 bool timer_up_action_available(UpAction action) {
   switch (action) {
     case UP_ACTION_SKIP:
@@ -788,6 +867,28 @@ bool timer_handle_up_action(bool long_press) {
     case UP_ACTION_MUTE:
       timer_silence_acknowledgement(true);
       return true;
+    case UP_ACTION_NONE:
+    default:
+      return false;
+  }
+}
+
+bool timer_handle_select_long_action(void) {
+  UpAction action = timer_current_select_long_action();
+  const UpActionDefinition *definition = prv_current_select_long_action_definition();
+  switch (action) {
+    case UP_ACTION_SKIP:
+      if (s_state.active) {
+        return timer_skip_active_segment();
+      }
+      return timer_skip_selected_segment();
+    case UP_ACTION_HIDE:
+      return ui_toggle_text_hidden();
+    case UP_ACTION_INCREMENT:
+      return definition ? prv_adjust_active_timer(definition->duration_ms, true) : false;
+    case UP_ACTION_DECREMENT:
+      return definition ? prv_adjust_active_timer(definition->duration_ms, false) : false;
+    case UP_ACTION_MUTE:
     case UP_ACTION_NONE:
     default:
       return false;

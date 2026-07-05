@@ -24,6 +24,7 @@ bool timer_next_segment_after(const TimerDefinition *timer,
                               uint64_t *next_elapsed_ms);
 void timer_update_running_state(void);
 void timer_ensure_refresh_timer(void);
+void timer_reschedule_refresh_timer(void);
 void timer_cancel_refresh_timer(void);
 void timer_cancel_wakeup(void);
 void timer_cancel_ack_timer(void);
@@ -37,8 +38,10 @@ void timer_silence_acknowledgement(bool reveal_text);
 bool timer_skip_selected_segment(void);
 bool timer_skip_active_segment(void);
 UpAction timer_current_up_action(bool long_press);
+UpAction timer_current_select_long_action(void);
 bool timer_up_action_available(UpAction action);
 bool timer_handle_up_action(bool long_press);
+bool timer_handle_select_long_action(void);
 void timer_handle_launch_wakeup(void);
 void timer_wakeup_handler(WakeupId wakeup_id, int32_t cookie);
 void timer_restore_ack_repeat_if_needed(void);

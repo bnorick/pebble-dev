@@ -30,6 +30,8 @@ const KEY_CFG_ACK_DURATION = 10019;
 const KEY_CFG_HINT = 10020;
 const KEY_CFG_UP_ACTION_TIME = 10021;
 const KEY_CFG_UP_LONG_ACTION_TIME = 10022;
+const KEY_CFG_SELECT_LONG_ACTION = 10023;
+const KEY_CFG_SELECT_LONG_ACTION_TIME = 10024;
 
 const CFG_OP_BEGIN = 1;
 const CFG_OP_TIMER = 2;
@@ -565,9 +567,9 @@ function normalizeFinishVibrate(raw, index, vibrationConfig) {
   return normalizeVibrate(raw.vibrate, vibrationConfig);
 }
 
-function normalizeUpAction(raw, fieldName, index) {
+function normalizeUpAction(raw, fieldName, index, defaultKind) {
   if (raw == null) {
-    return { kind: UP_ACTION_NONE, durationMs: 0 };
+    return { kind: defaultKind == null ? UP_ACTION_NONE : defaultKind, durationMs: 0 };
   }
 
   if (typeof raw === "string") {
@@ -611,6 +613,7 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     "on-finished",
     "on-press-up",
     "on-long-press-up",
+    "on-long-press-select",
     "must-acknowledge",
     "repeat-pattern-delay",
     "acknowledgment-alert-duration",
@@ -632,6 +635,12 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
   }
   const onPressUp = normalizeUpAction(raw["on-press-up"], "on-press-up", index);
   const onLongPressUp = normalizeUpAction(raw["on-long-press-up"], "on-long-press-up", index);
+  const onLongPressSelect = normalizeUpAction(
+    raw["on-long-press-select"],
+    "on-long-press-select",
+    index,
+    UP_ACTION_HIDE
+  );
   return {
     name: raw.name == null ? String(fallbackName || `Timer ${index + 1}`) : String(raw.name),
     repeat: repeat,
@@ -639,6 +648,7 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     iterations: repeatCount,
     onPressUp: onPressUp,
     onLongPressUp: onLongPressUp,
+    onLongPressSelect: onLongPressSelect,
     mustAcknowledge: raw["must-acknowledge"] === true,
     repeatPatternDelay: normalizeRepeatPatternDelay(raw["repeat-pattern-delay"], index),
     acknowledgeAlertDuration: normalizeAckAlertDuration(
@@ -804,8 +814,10 @@ function sendTimerAt(timers, timerIndex) {
   payload[KEY_CFG_ACK_DURATION] = timer.acknowledgeAlertDuration;
   payload[KEY_CFG_UP_ACTION] = timer.onPressUp.kind;
   payload[KEY_CFG_UP_LONG_ACTION] = timer.onLongPressUp.kind;
+  payload[KEY_CFG_SELECT_LONG_ACTION] = timer.onLongPressSelect.kind;
   payload[KEY_CFG_UP_ACTION_TIME] = encodeUint64Bytes(timer.onPressUp.durationMs);
   payload[KEY_CFG_UP_LONG_ACTION_TIME] = encodeUint64Bytes(timer.onLongPressUp.durationMs);
+  payload[KEY_CFG_SELECT_LONG_ACTION_TIME] = encodeUint64Bytes(timer.onLongPressSelect.durationMs);
   payload[KEY_CFG_TEXT] = timer.name;
   sendMessage(payload, function() {
     sendSegmentAt(timers, timerIndex, 0);

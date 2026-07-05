@@ -195,6 +195,10 @@ void ui_show_config_notice(void) {
   s_config_notice_timer = app_timer_register(1500, prv_config_notice_timer_callback, NULL);
 }
 
+bool ui_text_hidden(void) {
+  return s_text_hidden;
+}
+
 void ui_apply_text_hidden(bool hidden) {
   s_text_hidden = hidden;
   if (!s_title_layer || !s_hint_layer || !s_timer_layer || !s_status_layer || !s_detail_layer ||
@@ -212,6 +216,7 @@ void ui_apply_text_hidden(bool hidden) {
 
 bool ui_toggle_text_hidden(void) {
   ui_apply_text_hidden(!s_text_hidden);
+  timer_reschedule_refresh_timer();
   ui_refresh();
   return true;
 }
@@ -221,6 +226,7 @@ bool ui_reveal_text_if_hidden(void) {
     return false;
   }
   ui_apply_text_hidden(false);
+  timer_reschedule_refresh_timer();
   ui_refresh();
   return true;
 }

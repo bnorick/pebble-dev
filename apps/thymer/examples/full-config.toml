@@ -36,6 +36,7 @@ pattern = [
 [timers.focus-block]
 repeat = 4
 trigger = { swipe = "l-to-r" }
+# on-long-press-select defaults to "hide" when omitted.
 on-finished = { vibrate = "low-low-high" }
 vibrate = { intensity = "mid" }
 pattern = [
