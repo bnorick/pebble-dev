@@ -504,6 +504,8 @@ void ui_refresh(void) {
     segment_hint = segment->hint;
     if (s_state.awaiting_ack) {
       state_text = "Press select";
+    } else if (snap.completed || s_state.completed) {
+      state_text = "Done";
     } else if (!s_state.running && !snap.completed && !s_state.completed) {
       state_text = "Paused";
     }
@@ -517,6 +519,9 @@ void ui_refresh(void) {
     util_format_duration(shown_duration_ms, s_time_buffer, sizeof(s_time_buffer));
     segment_name = selected->segments[preview_segment].name;
     segment_hint = selected->segments[preview_segment].hint;
+    if (s_state.completed) {
+      state_text = "Done";
+    }
     s_iteration_buffer[0] = '\0';
   }
 

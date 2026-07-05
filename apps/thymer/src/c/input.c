@@ -141,6 +141,7 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
 
   if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
     s_state.duration_adjustment_ms = 0;
+    s_state.completed = false;
   }
   s_state.selected_timer = (uint8_t)next;
   s_selected_segment = 0;
@@ -164,6 +165,7 @@ bool input_select_timer_for_trigger(TriggerKind kind, TriggerZone from, TriggerZ
 
   if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
     s_state.duration_adjustment_ms = 0;
+    s_state.completed = false;
   }
   s_state.selected_timer = (uint8_t)next;
   s_selected_segment = 0;
@@ -264,6 +266,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
       ui_reveal_text_if_hidden();
       if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
         s_state.duration_adjustment_ms = 0;
+        s_state.completed = false;
       }
       s_state.selected_timer = (uint8_t)next;
       s_selected_segment = 0;

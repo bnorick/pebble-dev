@@ -251,6 +251,28 @@ static void prv_schedule_finish_wakeup(void) {
           (unsigned long long)remaining_s, (long)id);
 }
 
+static void prv_finish_to_preview_state(void) {
+  uint8_t finished_timer = s_state.active_timer;
+  if (finished_timer >= s_config.timer_count) {
+    finished_timer = 0;
+  }
+
+  s_state.active = false;
+  s_state.running = false;
+  s_state.completed = true;
+  s_state.awaiting_ack = false;
+  s_state.ack_silenced = false;
+  s_state.selected_timer = finished_timer;
+  s_state.active_timer = finished_timer;
+  s_state.paused_elapsed_ms = 0;
+  s_state.started_at_ms = 0;
+  s_state.ack_started_at_ms = 0;
+  s_selected_segment = 0;
+  timer_reset_phase_tracking();
+  timer_cancel_wakeup();
+  timer_cancel_ack_timer();
+}
+
 static TimerSnapshot prv_timer_snapshot_for_duration(const TimerDefinition *timer,
                                                      uint64_t elapsed_ms,
                                                      uint64_t total_duration_ms) {
@@ -416,13 +438,6 @@ void timer_update_running_state(void) {
     s_last_iteration_index = snap.iteration_index;
   }
   if (snap.completed) {
-    s_state.running = false;
-    s_state.completed = true;
-    s_state.awaiting_ack = false;
-    s_state.ack_silenced = false;
-    s_state.paused_elapsed_ms = snap.total_duration_ms;
-    s_state.ack_started_at_ms = 0;
-    timer_cancel_ack_timer();
     if (!s_state.alert_fired && timer_has_finite_end(timer)) {
       if (timer->finish_vibe_count > 0) {
         timer_play_vibration_pattern(timer->finish_vibes, timer->finish_vibe_count);
@@ -431,7 +446,7 @@ void timer_update_running_state(void) {
       }
       s_state.alert_fired = true;
     }
-    timer_cancel_wakeup();
+    prv_finish_to_preview_state();
     config_persist_state();
   }
 }
@@ -544,17 +559,27 @@ void timer_resume(void) {
 }
 
 void timer_reset(void) {
+  uint8_t reset_timer = s_state.active ? s_state.active_timer : s_state.selected_timer;
+  if (reset_timer >= s_config.timer_count) {
+    reset_timer = 0;
+  }
+  bool preserve_adjustment = s_state.active && !s_state.completed;
+
   s_state.active = false;
   s_state.running = false;
   s_state.completed = false;
   s_state.alert_fired = false;
   s_state.awaiting_ack = false;
   s_state.ack_silenced = false;
-  s_state.active_timer = s_state.selected_timer;
+  s_state.selected_timer = reset_timer;
+  s_state.active_timer = reset_timer;
   s_state.paused_elapsed_ms = 0;
   s_state.started_at_ms = 0;
   s_state.ack_started_at_ms = 0;
-  s_state.duration_adjustment_ms = 0;
+  if (!preserve_adjustment) {
+    s_state.duration_adjustment_ms = 0;
+  }
+  s_selected_segment = 0;
   timer_reset_phase_tracking();
   timer_cancel_wakeup();
   timer_cancel_ack_timer();
@@ -565,7 +590,7 @@ void timer_reset(void) {
 }
 
 bool timer_reset_available(void) {
-  return s_state.active || s_state.duration_adjustment_ms != 0;
+  return s_state.active || s_state.duration_adjustment_ms != 0 || s_selected_segment != 0;
 }
 
 void timer_dismiss_acknowledgement(bool reveal_text) {
