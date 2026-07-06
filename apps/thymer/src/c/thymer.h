@@ -233,10 +233,11 @@ typedef struct __attribute__((__packed__)) {
 typedef struct {
   uint16_t version;
   uint8_t timer_count;
+  uint8_t timer_capacity;
   bool icons_enabled;
   bool background_enabled;
   bool timer_accent_enabled;
-  TimerDefinition timers[MAX_TIMERS];
+  TimerDefinition *timers;
 } TimerConfig;
 
 typedef struct {
@@ -257,10 +258,11 @@ typedef struct {
 
 typedef struct {
   uint8_t timer_count;
+  uint8_t timer_capacity;
   bool icons_enabled;
   bool background_enabled;
   bool timer_accent_enabled;
-  TimerDefinition timers[MAX_TIMERS];
+  TimerDefinition *timers;
 } PendingConfig;
 
 typedef struct {

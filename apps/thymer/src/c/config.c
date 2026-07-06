@@ -89,11 +89,11 @@ static void prv_reset_timer_definition(TimerDefinition *timer) {
   memset(timer, 0, sizeof(*timer));
 }
 
-static void prv_reset_timer_array(TimerDefinition *timers) {
-  if (!timers) {
+static void prv_reset_timer_array(TimerDefinition *timers, uint8_t count) {
+  if (!timers || count == 0) {
     return;
   }
-  for (uint8_t i = 0; i < MAX_TIMERS; ++i) {
+  for (uint8_t i = 0; i < count; ++i) {
     prv_reset_timer_definition(&timers[i]);
   }
 }
@@ -102,7 +102,8 @@ static void prv_reset_config(TimerConfig *config) {
   if (!config) {
     return;
   }
-  prv_reset_timer_array(config->timers);
+  prv_reset_timer_array(config->timers, config->timer_capacity);
+  free(config->timers);
   memset(config, 0, sizeof(*config));
 }
 
@@ -110,7 +111,8 @@ static void prv_reset_pending_config(PendingConfig *config) {
   if (!config) {
     return;
   }
-  prv_reset_timer_array(config->timers);
+  prv_reset_timer_array(config->timers, config->timer_capacity);
+  free(config->timers);
   memset(config, 0, sizeof(*config));
 }
 
@@ -119,13 +121,35 @@ static void prv_swap_configs(TimerConfig *a, TimerConfig *b) {
     return;
   }
 
-  uint8_t *a_bytes = (uint8_t *)a;
-  uint8_t *b_bytes = (uint8_t *)b;
-  for (size_t i = 0; i < sizeof(TimerConfig); ++i) {
-    uint8_t tmp = a_bytes[i];
-    a_bytes[i] = b_bytes[i];
-    b_bytes[i] = tmp;
+  TimerConfig tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+
+static bool prv_ensure_timer_capacity(TimerDefinition **timers,
+                                      uint8_t *capacity,
+                                      uint8_t required_count) {
+  if (!timers || !capacity) {
+    return false;
   }
+  if (required_count == 0) {
+    return true;
+  }
+  if (*capacity >= required_count && *timers) {
+    return true;
+  }
+
+  TimerDefinition *resized = realloc(*timers, sizeof(TimerDefinition) * required_count);
+  if (!resized) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "timer allocation failed count=%u", (unsigned)required_count);
+    return false;
+  }
+  if (required_count > *capacity) {
+    memset(&resized[*capacity], 0, sizeof(TimerDefinition) * (required_count - *capacity));
+  }
+  *timers = resized;
+  *capacity = required_count;
+  return true;
 }
 
 static bool prv_allocate_segments(TimerDefinition *timer, uint8_t segment_count) {
@@ -365,10 +389,15 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
 
   out->version = CONFIG_VERSION;
   out->timer_count = meta.timer_count;
+  out->timer_capacity = 0;
   bool legacy_ui_flags = (meta.ui_flags & ~(uint8_t)CONFIG_FLAG_ICONS) == 0;
   out->icons_enabled = (meta.ui_flags & CONFIG_FLAG_ICONS) != 0;
   out->background_enabled = legacy_ui_flags || (meta.ui_flags & CONFIG_FLAG_BACKGROUND) != 0;
   out->timer_accent_enabled = legacy_ui_flags || (meta.ui_flags & CONFIG_FLAG_TIMER_ACCENT) != 0;
+  if (!prv_ensure_timer_capacity(&out->timers, &out->timer_capacity, meta.timer_count)) {
+    snprintf(reason, reason_len, "Timer array allocation failed");
+    goto fail;
+  }
 
   for (uint8_t timer_index = 0; timer_index < meta.timer_count; ++timer_index) {
     PersistTimerRecord timer_record = {0};
@@ -488,6 +517,9 @@ void config_deinit(void) {
 void config_default_config(void) {
   prv_reset_config(&s_config);
   prv_init_default_header(&s_config);
+  if (!prv_ensure_timer_capacity(&s_config.timers, &s_config.timer_capacity, 1)) {
+    return;
+  }
   s_config.timer_count = 1;
   if (!prv_set_default_timer(&s_config.timers[0])) {
     s_config.timer_count = 0;
@@ -627,6 +659,9 @@ static void prv_reset_runtime_for_new_config(void) {
 static void prv_build_default_candidate(TimerConfig *config) {
   prv_reset_config(config);
   prv_init_default_header(config);
+  if (!prv_ensure_timer_capacity(&config->timers, &config->timer_capacity, 1)) {
+    return;
+  }
   config->timer_count = 1;
   if (!prv_set_default_timer(&config->timers[0])) {
     config->timer_count = 0;
@@ -640,6 +675,10 @@ static bool prv_build_config_from_pending(TimerConfig *config) {
   config->background_enabled = s_pending_config.background_enabled;
   config->timer_accent_enabled = s_pending_config.timer_accent_enabled;
   config->timer_count = s_pending_config.timer_count;
+  if (!prv_ensure_timer_capacity(&config->timers, &config->timer_capacity, config->timer_count)) {
+    prv_build_default_candidate(config);
+    return false;
+  }
 
   for (uint8_t timer_index = 0; timer_index < s_pending_config.timer_count; ++timer_index) {
     if (!prv_copy_timer_definition(&config->timers[timer_index],
@@ -738,6 +777,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     if (count_tuple) {
       s_pending_config.timer_count = (uint8_t)util_clamp_i32(count_tuple->value->int32,
                                                              0, MAX_TIMERS);
+      if (!prv_ensure_timer_capacity(&s_pending_config.timers,
+                                     &s_pending_config.timer_capacity,
+                                     s_pending_config.timer_count)) {
+        s_pending_config.timer_count = 0;
+      }
     }
     if (ui_flags_tuple) {
       s_pending_config.icons_enabled = (ui_flags_tuple->value->int32 & CONFIG_FLAG_ICONS) != 0;
@@ -781,6 +825,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     }
     uint8_t index = (uint8_t)timer_tuple->value->int32;
     if (index >= MAX_TIMERS) {
+      return;
+    }
+    if (!prv_ensure_timer_capacity(&s_pending_config.timers,
+                                   &s_pending_config.timer_capacity,
+                                   index + 1)) {
       return;
     }
     uint8_t segment_count = segment_count_tuple
@@ -849,7 +898,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     }
     uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
     uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
-    if (timer_index >= MAX_TIMERS) {
+    if (timer_index >= MAX_TIMERS || timer_index >= s_pending_config.timer_capacity ||
+        !s_pending_config.timers) {
       return;
     }
     TimerDefinition *timer = &s_pending_config.timers[timer_index];
@@ -887,7 +937,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
     uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
     uint8_t warn_index = (uint8_t)warn_tuple->value->int32;
-    if (timer_index >= MAX_TIMERS || warn_index >= MAX_WARN_ATS) {
+    if (timer_index >= MAX_TIMERS || warn_index >= MAX_WARN_ATS ||
+        timer_index >= s_pending_config.timer_capacity || !s_pending_config.timers) {
       return;
     }
     TimerDefinition *timer = &s_pending_config.timers[timer_index];
@@ -924,7 +975,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
     uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
     uint8_t alert_index = (uint8_t)alert_tuple->value->int32;
-    if (timer_index >= MAX_TIMERS || alert_index >= MAX_VIBE_STEPS) {
+    if (timer_index >= MAX_TIMERS || alert_index >= MAX_VIBE_STEPS ||
+        timer_index >= s_pending_config.timer_capacity || !s_pending_config.timers) {
       return;
     }
     VibeStep *step = NULL;

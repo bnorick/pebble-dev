@@ -440,10 +440,13 @@ static void prv_schedule_next_wakeup(void) {
   time_t now_s = 0;
   time_ms(&now_s, NULL);
   if (remaining_s > INT32_MAX) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "skip wakeup remaining_s too large=%llu",
+            (unsigned long long)remaining_s);
     return;
   }
   WakeupId id = wakeup_schedule(now_s + (time_t)remaining_s, WAKEUP_COOKIE_FINISH, true);
-  (void)id;
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "schedule wakeup remaining_s=%llu id=%ld",
+          (unsigned long long)remaining_s, (long)id);
 }
 
 static void prv_finish_to_preview_state(void) {
@@ -1156,12 +1159,14 @@ void timer_handle_launch_wakeup(void) {
   }
   WakeupId id = 0;
   int32_t cookie = 0;
-  (void)wakeup_get_launch_event(&id, &cookie);
+  if (wakeup_get_launch_event(&id, &cookie)) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "wakeup launch id=%ld cookie=%ld", (long)id, (long)cookie);
+  }
   timer_update_running_state();
 }
 
 void timer_wakeup_handler(WakeupId wakeup_id, int32_t cookie) {
-  (void)wakeup_id;
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "wakeup id=%ld cookie=%ld", (long)wakeup_id, (long)cookie);
   if (cookie == WAKEUP_COOKIE_FINISH) {
     timer_update_running_state();
     ui_refresh();
