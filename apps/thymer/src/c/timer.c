@@ -15,6 +15,10 @@ enum {
   HIDDEN_FALLBACK_REFRESH_MS = 1000,
 };
 
+static TimerSnapshot prv_timer_snapshot_for_duration(const TimerDefinition *timer,
+                                                     uint64_t elapsed_ms,
+                                                     uint64_t total_duration_ms);
+
 static uint32_t prv_scaled_vibe_duration_ms(VibeIntensity intensity, uint16_t duration_ms) {
   uint32_t base = duration_ms ? duration_ms : 100;
   switch (intensity) {
@@ -202,12 +206,13 @@ static bool prv_next_warning_elapsed_ms(const TimerDefinition *timer,
   }
 
   uint64_t segment_start_ms = prv_segment_elapsed_at(timer, snap->iteration_index, snap->phase_index);
-  uint64_t segment_end_ms = util_add_u64_saturating(segment_start_ms, segment->duration_ms);
+  uint64_t segment_end_ms = snap->elapsed_ms + snap->phase_remaining_ms;
+  uint64_t effective_segment_duration_ms = segment_end_ms - segment_start_ms;
   bool found = false;
   uint64_t best = 0;
   for (uint8_t i = 0; i < segment->warn_count; ++i) {
     const SegmentWarning *warn = &segment->warns[i];
-    if (warn->time_before_end_ms >= segment->duration_ms) {
+    if (warn->time_before_end_ms >= effective_segment_duration_ms) {
       continue;
     }
     uint64_t candidate = segment_end_ms - warn->time_before_end_ms;
@@ -229,21 +234,23 @@ static bool prv_next_warning_elapsed_ms(const TimerDefinition *timer,
 
 static void prv_play_warnings_between(const TimerDefinition *timer,
                                       uint64_t from_elapsed_ms,
-                                      uint64_t to_elapsed_ms) {
+                                      uint64_t to_elapsed_ms,
+                                      uint64_t total_duration_ms) {
   if (!timer || to_elapsed_ms <= from_elapsed_ms) {
     return;
   }
 
   uint64_t cursor = from_elapsed_ms;
   while (cursor < to_elapsed_ms) {
-    TimerSnapshot snap = timer_snapshot_for(timer, cursor);
+    TimerSnapshot snap = prv_timer_snapshot_for_duration(timer, cursor, total_duration_ms);
     if (!snap.valid || snap.completed || snap.phase_index >= timer->segment_count) {
       return;
     }
 
     const TimerSegment *segment = &timer->segments[snap.phase_index];
     uint64_t segment_start_ms = prv_segment_elapsed_at(timer, snap.iteration_index, snap.phase_index);
-    uint64_t segment_end_ms = util_add_u64_saturating(segment_start_ms, segment->duration_ms);
+    uint64_t segment_end_ms = snap.elapsed_ms + snap.phase_remaining_ms;
+    uint64_t effective_segment_duration_ms = segment_end_ms - segment_start_ms;
     uint64_t upper_bound_ms = to_elapsed_ms < segment_end_ms ? to_elapsed_ms : segment_end_ms;
     uint64_t warning_cursor_ms = cursor;
 
@@ -253,7 +260,7 @@ static void prv_play_warnings_between(const TimerDefinition *timer,
       const SegmentWarning *next_warning = NULL;
       for (uint8_t i = 0; i < segment->warn_count; ++i) {
         const SegmentWarning *warn = &segment->warns[i];
-        if (warn->time_before_end_ms >= segment->duration_ms) {
+        if (warn->time_before_end_ms >= effective_segment_duration_ms) {
           continue;
         }
         uint64_t trigger_elapsed_ms = segment_end_ms - warn->time_before_end_ms;
@@ -275,11 +282,54 @@ static void prv_play_warnings_between(const TimerDefinition *timer,
       warning_cursor_ms = next_warning_ms;
     }
 
-    if (upper_bound_ms >= to_elapsed_ms || upper_bound_ms >= segment_end_ms) {
-      cursor = upper_bound_ms;
-    } else {
-      cursor = upper_bound_ms;
-    }
+    cursor = upper_bound_ms;
+  }
+}
+
+static void prv_play_newly_due_warning_adjustments(const TimerDefinition *timer,
+                                                   uint64_t elapsed_ms,
+                                                   uint64_t previous_total_duration_ms,
+                                                   uint64_t current_total_duration_ms) {
+  if (!timer || current_total_duration_ms >= previous_total_duration_ms ||
+      elapsed_ms >= current_total_duration_ms) {
+    return;
+  }
+
+  TimerSnapshot current_snap = prv_timer_snapshot_for_duration(timer,
+                                                               elapsed_ms,
+                                                               current_total_duration_ms);
+  if (!current_snap.valid || current_snap.completed ||
+      current_snap.phase_index >= timer->segment_count) {
+    return;
+  }
+
+  const TimerSegment *segment = &timer->segments[current_snap.phase_index];
+  if (segment->warn_count == 0) {
+    return;
+  }
+
+  uint64_t segment_start_ms = prv_segment_elapsed_at(timer,
+                                                     current_snap.iteration_index,
+                                                     current_snap.phase_index);
+  uint64_t current_segment_end_ms = current_snap.elapsed_ms + current_snap.phase_remaining_ms;
+  uint64_t previous_segment_end_ms =
+    util_add_u64_saturating(segment_start_ms, segment->duration_ms);
+  bool final_configured_segment = !timer->repeat
+    ? (current_snap.phase_index + 1 == timer->segment_count)
+    : (current_snap.iteration_index + 1 == timer->iterations &&
+       current_snap.phase_index + 1 == timer->segment_count);
+  if (previous_total_duration_ms > segment_start_ms &&
+      previous_total_duration_ms < previous_segment_end_ms) {
+    previous_segment_end_ms = previous_total_duration_ms;
+  } else if (final_configured_segment &&
+             previous_total_duration_ms > previous_segment_end_ms) {
+    previous_segment_end_ms = previous_total_duration_ms;
+  }
+  if (previous_segment_end_ms > current_segment_end_ms) {
+    prv_play_warnings_between(timer,
+                              elapsed_ms,
+                              elapsed_ms + (previous_segment_end_ms - current_segment_end_ms),
+                              previous_total_duration_ms);
   }
 }
 
@@ -390,13 +440,10 @@ static void prv_schedule_next_wakeup(void) {
   time_t now_s = 0;
   time_ms(&now_s, NULL);
   if (remaining_s > INT32_MAX) {
-    APP_LOG(APP_LOG_LEVEL_WARNING, "skip wakeup remaining_s too large=%llu",
-            (unsigned long long)remaining_s);
     return;
   }
   WakeupId id = wakeup_schedule(now_s + (time_t)remaining_s, WAKEUP_COOKIE_FINISH, true);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "schedule wakeup remaining_s=%llu id=%ld",
-          (unsigned long long)remaining_s, (long)id);
+  (void)id;
 }
 
 static void prv_finish_to_preview_state(void) {
@@ -483,6 +530,18 @@ static TimerSnapshot prv_timer_snapshot_for_duration(const TimerDefinition *time
   }
 
   snap.total_remaining_ms = snap.infinite ? 0 : (snap.total_duration_ms - elapsed_ms);
+  if (!snap.infinite) {
+    bool final_configured_segment = !timer->repeat
+      ? (snap.phase_index + 1 == timer->segment_count)
+      : (snap.iteration_index + 1 == timer->iterations &&
+         snap.phase_index + 1 == timer->segment_count);
+    if (snap.total_remaining_ms < snap.phase_remaining_ms) {
+      snap.phase_remaining_ms = snap.total_remaining_ms;
+    } else if (final_configured_segment &&
+               snap.total_duration_ms > base_total_duration_ms) {
+      snap.phase_remaining_ms = snap.total_remaining_ms;
+    }
+  }
   return snap;
 }
 
@@ -551,7 +610,10 @@ void timer_update_running_state(void) {
 
   TimerSnapshot snap = timer_current_snapshot();
   if (s_last_elapsed_ms_valid && snap.valid && s_state.running && snap.elapsed_ms > s_last_elapsed_ms) {
-    prv_play_warnings_between(timer, s_last_elapsed_ms, snap.elapsed_ms);
+    prv_play_warnings_between(timer,
+                              s_last_elapsed_ms,
+                              snap.elapsed_ms,
+                              snap.total_duration_ms);
   }
   if (!snap.completed && snap.valid && s_state.running) {
     if (s_last_phase_index != 0xff &&
@@ -949,6 +1011,13 @@ static bool prv_adjust_active_timer(uint64_t delta_ms, bool increment) {
     return false;
   }
 
+  uint64_t elapsed_ms = s_state.active
+    ? (s_state.running ? (util_now_ms() - s_state.started_at_ms) : s_state.paused_elapsed_ms)
+    : 0;
+  uint64_t previous_total_duration_ms = s_state.active
+    ? prv_adjusted_total_duration_ms(timer_total_duration_ms(timer))
+    : 0;
+
   if (increment) {
     if (delta_ms > (uint64_t)INT64_MAX - (uint64_t)(s_state.duration_adjustment_ms > 0
         ? s_state.duration_adjustment_ms : 0)) {
@@ -971,7 +1040,15 @@ static bool prv_adjust_active_timer(uint64_t delta_ms, bool increment) {
     s_state.ack_silenced = false;
     s_state.ack_started_at_ms = 0;
     timer_cancel_ack_timer();
-    prv_clear_elapsed_tracking();
+
+    uint64_t current_total_duration_ms =
+      prv_adjusted_total_duration_ms(timer_total_duration_ms(timer));
+    if (s_state.running) {
+      prv_play_newly_due_warning_adjustments(timer,
+                                             elapsed_ms,
+                                             previous_total_duration_ms,
+                                             current_total_duration_ms);
+    }
 
     timer_update_running_state();
     if (s_state.running) {
@@ -1079,14 +1156,12 @@ void timer_handle_launch_wakeup(void) {
   }
   WakeupId id = 0;
   int32_t cookie = 0;
-  if (wakeup_get_launch_event(&id, &cookie)) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "wakeup launch id=%ld cookie=%ld", (long)id, (long)cookie);
-  }
+  (void)wakeup_get_launch_event(&id, &cookie);
   timer_update_running_state();
 }
 
 void timer_wakeup_handler(WakeupId wakeup_id, int32_t cookie) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "wakeup id=%ld cookie=%ld", (long)wakeup_id, (long)cookie);
+  (void)wakeup_id;
   if (cookie == WAKEUP_COOKIE_FINISH) {
     timer_update_running_state();
     ui_refresh();
