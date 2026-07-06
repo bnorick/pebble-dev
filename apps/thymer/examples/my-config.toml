@@ -27,8 +27,10 @@ trigger = { tap = "left" }
 
 [timers.video-games]
 on-press-up = { action = "increment", time = "00:05:00" }
-pattern = [
-  { time = "00:15:00" },
+time = "00:15:00"
+warn-at = [
+  { time = "00:05:00", vibrate = "high" },
+  { time = "00:01:00", vibrate = "high-high" },
 ]
 on-finished = { vibrate="high-high-high" }
 trigger = { tap = "left" }
@@ -59,37 +61,25 @@ trigger = { tap = "right" }
 
 [timers.1-min]
 trigger = { tap = "bottom" }
-on-press-up = { action = "increment", time="00:00:30" }
-pattern = [
-  { time = "00:01:00" }
-]
-on-finished = { vibrate = "high-high" }
-
-
-[timers.5-min]
-trigger = { tap = "bottom" }
 on-press-up = { action = "increment", time="00:01:00" }
-pattern = [
-  { time = "00:05:00" }
-]
+on-long-press-up = { action = "increment", time="00:00:30" }
+time = "00:01:00"
 on-finished = { vibrate = "high-high" }
 
 
 [timers.10-min]
 trigger = { tap = "bottom" }
 on-press-up = { action = "increment", time="00:05:00" }
-pattern = [
-  { time = "00:10:00" }
-]
+on-long-press-up = { action = "increment", time="00:01:00" }
+time = "00:10:00"
 on-finished = { vibrate = "high-high" }
 
 
 [timers.20-min]
 trigger = { tap = "bottom" }
 on-press-up = { action = "increment", time="00:10:00" }
-pattern = [
-  { time = "00:20:00" }
-]
+on-long-press-up = { action = "increment", time="00:05:00" }
+time = "00:20:00"
 on-finished = { vibrate = "high-high" }
 
 # changes as I test various new config/functionality
@@ -102,4 +92,9 @@ pattern = [
   { name = "two",   time = "00:00:04", vibrate = "superlow-superlow" },
   { name = "three", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
 ]
+trigger = { swipe = "up" }
+
+[timers.test2]
+name = "stopwatch"
+stopwatch = true
 trigger = { swipe = "up" }

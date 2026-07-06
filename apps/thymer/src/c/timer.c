@@ -74,6 +74,14 @@ bool timer_allows_skip(const TimerDefinition *timer) {
          timer->on_long_press_up.kind == UP_ACTION_SKIP;
 }
 
+bool timer_is_stopwatch_timer(const TimerDefinition *timer) {
+  return timer && timer->stopwatch;
+}
+
+bool timer_is_true_stopwatch_timer(const TimerDefinition *timer) {
+  return timer && timer->stopwatch && timer->stopwatch_only;
+}
+
 uint8_t timer_clamp_segment_index(const TimerDefinition *timer, uint8_t segment_index) {
   if (!timer || timer->segment_count == 0) {
     return 0;
@@ -460,6 +468,7 @@ static void prv_finish_to_preview_state(void) {
   s_state.completed = true;
   s_state.awaiting_ack = false;
   s_state.ack_silenced = false;
+  s_state.active_stopwatch = false;
   s_state.selected_timer = finished_timer;
   s_state.active_timer = finished_timer;
   s_state.paused_elapsed_ms = 0;
@@ -781,7 +790,7 @@ void timer_cancel_ack_timer(void) {
   }
 }
 
-void timer_start(uint8_t timer_index) {
+static void prv_start_timer(uint8_t timer_index, bool force_stopwatch) {
   if (timer_index >= s_config.timer_count) {
     return;
   }
@@ -799,6 +808,7 @@ void timer_start(uint8_t timer_index) {
   s_state.alert_fired = false;
   s_state.awaiting_ack = false;
   s_state.ack_silenced = false;
+  s_state.active_stopwatch = force_stopwatch || timer->stopwatch;
   s_state.selected_timer = timer_index;
   s_state.active_timer = timer_index;
   s_state.started_at_ms = util_now_ms() - elapsed_ms;
@@ -819,6 +829,14 @@ void timer_start(uint8_t timer_index) {
   config_persist_state();
   timer_ensure_refresh_timer();
   ui_refresh();
+}
+
+void timer_start(uint8_t timer_index) {
+  prv_start_timer(timer_index, false);
+}
+
+void timer_start_stopwatch(uint8_t timer_index) {
+  prv_start_timer(timer_index, true);
 }
 
 void timer_pause(void) {
@@ -868,6 +886,7 @@ void timer_reset(void) {
   s_state.alert_fired = false;
   s_state.awaiting_ack = false;
   s_state.ack_silenced = false;
+  s_state.active_stopwatch = false;
   s_state.selected_timer = reset_timer;
   s_state.active_timer = reset_timer;
   s_state.paused_elapsed_ms = 0;
@@ -1101,6 +1120,8 @@ bool timer_up_action_available(UpAction action) {
         return !s_state.completed && !s_state.awaiting_ack && timer_active_timer() != NULL;
       }
       return timer_selected_timer() != NULL;
+    case UP_ACTION_STOPWATCH:
+      return !s_state.active && timer_selected_timer() != NULL;
     case UP_ACTION_NONE:
     default:
       return false;
@@ -1122,6 +1143,9 @@ bool timer_handle_up_action(bool long_press) {
       return definition ? prv_adjust_active_timer(definition->duration_ms, true) : false;
     case UP_ACTION_DECREMENT:
       return definition ? prv_adjust_active_timer(definition->duration_ms, false) : false;
+    case UP_ACTION_STOPWATCH:
+      timer_start_stopwatch(s_state.selected_timer);
+      return true;
     case UP_ACTION_MUTE:
       timer_silence_acknowledgement(true);
       return true;
@@ -1146,6 +1170,9 @@ bool timer_handle_select_long_action(void) {
       return definition ? prv_adjust_active_timer(definition->duration_ms, true) : false;
     case UP_ACTION_DECREMENT:
       return definition ? prv_adjust_active_timer(definition->duration_ms, false) : false;
+    case UP_ACTION_STOPWATCH:
+      timer_start_stopwatch(s_state.selected_timer);
+      return true;
     case UP_ACTION_MUTE:
     case UP_ACTION_NONE:
     default:

@@ -21,6 +21,8 @@
 #define TIMER_FLAG_REPEAT 0x1
 #define TIMER_FLAG_ITERATIONS_ENABLED 0x2
 #define TIMER_FLAG_MUST_ACKNOWLEDGE 0x4
+#define TIMER_FLAG_STOPWATCH 0x8
+#define TIMER_FLAG_STOPWATCH_ONLY 0x10
 
 #define PERSIST_KEY_CONFIG_META 100
 #define PERSIST_KEY_STATE 101
@@ -28,7 +30,7 @@
 #define PERSIST_KEY_SEGMENT_BASE 300
 
 #define WAKEUP_COOKIE_FINISH 1
-#define CONFIG_VERSION 15
+#define CONFIG_VERSION 16
 #define BUTTON_HINT_ICON_SIZE 28
 #define BUTTON_HINT_ICON_HALF (BUTTON_HINT_ICON_SIZE / 2)
 #define BUTTON_HINT_WIDTH 30
@@ -132,7 +134,8 @@ typedef enum {
   UP_ACTION_HIDE = 2,
   UP_ACTION_INCREMENT = 3,
   UP_ACTION_DECREMENT = 4,
-  UP_ACTION_MUTE = 5,
+  UP_ACTION_STOPWATCH = 5,
+  UP_ACTION_MUTE = 6,
 } UpAction;
 
 typedef struct {
@@ -167,6 +170,8 @@ typedef struct {
   bool repeat;
   bool iterations_enabled;
   bool must_acknowledge;
+  bool stopwatch;
+  bool stopwatch_only;
   UpActionDefinition on_press_up;
   UpActionDefinition on_long_press_up;
   UpActionDefinition on_long_press_select;
@@ -248,6 +253,7 @@ typedef struct {
   bool alert_fired;
   bool awaiting_ack;
   bool ack_silenced;
+  bool active_stopwatch;
   uint8_t selected_timer;
   uint8_t active_timer;
   uint64_t started_at_ms;

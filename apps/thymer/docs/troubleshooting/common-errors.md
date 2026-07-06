@@ -55,6 +55,10 @@ trigger = { swipe = "up" }
 
 Infinite timers never finish, so `on-finished` only works with one-shot and finite repeating timers.
 
+## `timer N true stopwatch cannot use on-finished`
+
+If you omit both `time` and `pattern`, `stopwatch = true` creates a true stopwatch with no preset finish, so `on-finished` is not valid there.
+
 ## `... uses unsupported key: ...`
 
 The parser is strict. Unknown keys in timer tables and inline tables are rejected instead of being ignored.

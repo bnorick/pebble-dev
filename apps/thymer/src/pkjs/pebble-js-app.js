@@ -76,6 +76,7 @@ const UP_ACTION_SKIP = 1;
 const UP_ACTION_HIDE = 2;
 const UP_ACTION_INCREMENT = 3;
 const UP_ACTION_DECREMENT = 4;
+const UP_ACTION_STOPWATCH = 5;
 
 const SEGMENT_KEYS = ["hint", "time", "vibrate", "warn-at"];
 
@@ -89,9 +90,11 @@ function parseUpActionKind(raw, fieldName, index) {
       return UP_ACTION_INCREMENT;
     case "decrement":
       return UP_ACTION_DECREMENT;
+    case "stopwatch":
+      return UP_ACTION_STOPWATCH;
     default:
       throw new Error(
-        `timer ${index + 1} ${fieldName} action must be "skip", "hide", "increment", or "decrement"`
+        `timer ${index + 1} ${fieldName} action must be "skip", "hide", "increment", "decrement", or "stopwatch"`
       );
   }
 }
@@ -402,7 +405,7 @@ function parseVibrationConfig(raw) {
       continue;
     }
     if (key === "acknowledgment-alert-duration") {
-      acknowledgeAlertDuration = normalizeAckAlertDuration(raw[key], 0);
+      acknowledgeAlertDuration = normalizeAckAlertDuration(raw[key], "vibration");
       continue;
     }
     if (key === "warning") {
@@ -437,18 +440,20 @@ function intensityDuration(value, vibrationConfig) {
 const MAX_DURATION_MS = Number.MAX_SAFE_INTEGER;
 const MS_PER_SECOND = 1000;
 const TEN_THOUSANDTHS_PER_SECOND = 10000;
+const TRUE_STOPWATCH_DURATION_MS = MAX_DURATION_MS;
 
-function normalizeSegmentDurationMs(value) {
+function normalizeSegmentDurationMs(value, context) {
+  const label = context || "segment time";
   if (value == null) {
-    throw new Error("segment time is required");
+    throw new Error(`${label} is required`);
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) {
-      throw new Error(`invalid segment duration: ${value}`);
+      throw new Error(`invalid ${label}: ${value}`);
     }
     const totalMs = value * MS_PER_SECOND;
     if (!Number.isSafeInteger(totalMs) || totalMs < 1 || totalMs > MAX_DURATION_MS) {
-      throw new Error(`segment duration out of range: ${value}`);
+      throw new Error(`${label} out of range: ${value}`);
     }
     return totalMs;
   }
@@ -456,7 +461,7 @@ function normalizeSegmentDurationMs(value) {
   const raw = String(value == null ? "" : value).trim();
   const match = /^(?:(\d+)-)?(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,4}))?$/.exec(raw);
   if (!match) {
-    throw new Error(`invalid segment duration: ${value}`);
+    throw new Error(`invalid ${label}: ${value}`);
   }
 
   const days = Number(match[1] || 0);
@@ -464,7 +469,7 @@ function normalizeSegmentDurationMs(value) {
   const minutes = Number(match[3]);
   const seconds = Number(match[4]);
   if (hours > 23 || minutes > 59 || seconds > 59) {
-    throw new Error(`invalid segment duration: ${value}`);
+    throw new Error(`invalid ${label}: ${value}`);
   }
 
   let totalTenThousandths = days * 86400 * TEN_THOUSANDTHS_PER_SECOND;
@@ -476,38 +481,38 @@ function normalizeSegmentDurationMs(value) {
   }
 
   if (!Number.isSafeInteger(totalTenThousandths)) {
-    throw new Error(`segment duration out of range: ${value}`);
+    throw new Error(`${label} out of range: ${value}`);
   }
 
   const totalMs = Math.floor((totalTenThousandths + 9) / 10);
   if (totalMs < 1 || totalMs > MAX_DURATION_MS) {
-    throw new Error(`segment duration out of range: ${value}`);
+    throw new Error(`${label} out of range: ${value}`);
   }
   return totalMs;
 }
 
-function normalizeRepeatPatternDelay(value, index) {
+function normalizeRepeatPatternDelay(value, timerContext) {
   if (value == null) {
     return DEFAULT_REPEAT_PATTERN_DELAY;
   }
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) {
-    throw new Error(`timer ${index + 1} repeat-pattern-delay must be a non-negative integer`);
+    throw new Error(`${timerContext} repeat-pattern-delay must be a non-negative integer`);
   }
   if (value > 65535) {
-    throw new Error(`timer ${index + 1} repeat-pattern-delay out of range`);
+    throw new Error(`${timerContext} repeat-pattern-delay out of range`);
   }
   return value;
 }
 
-function normalizeAckAlertDuration(value, index) {
+function normalizeAckAlertDuration(value, timerContext) {
   if (value == null) {
     return DEFAULT_ACK_ALERT_DURATION;
   }
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) {
-    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgment-alert-duration must be a non-negative integer`);
+    throw new Error(`${timerContext || "vibration"} acknowledgment-alert-duration must be a non-negative integer`);
   }
   if (value > 65535) {
-    throw new Error(`${index >= 0 ? `timer ${index + 1}` : "vibration"} acknowledgment-alert-duration out of range`);
+    throw new Error(`${timerContext || "vibration"} acknowledgment-alert-duration out of range`);
   }
   return value;
 }
@@ -573,7 +578,7 @@ function defaultWarningVibrate(vibrationConfig) {
 function normalizeWarnAtEntry(raw, vibrationConfig, context) {
   if (typeof raw === "string" || typeof raw === "number") {
     return {
-      timeBeforeEndMs: normalizeSegmentDurationMs(raw),
+      timeBeforeEndMs: normalizeSegmentDurationMs(raw, `${context} time`),
       vibrate: defaultWarningVibrate(vibrationConfig),
     };
   }
@@ -585,7 +590,7 @@ function normalizeWarnAtEntry(raw, vibrationConfig, context) {
     throw new Error(`${context} must define time`);
   }
   return {
-    timeBeforeEndMs: normalizeSegmentDurationMs(raw.time),
+    timeBeforeEndMs: normalizeSegmentDurationMs(raw.time, `${context} time`),
     vibrate: raw.vibrate != null
       ? normalizeVibrate(raw.vibrate, vibrationConfig)
       : defaultWarningVibrate(vibrationConfig),
@@ -625,7 +630,9 @@ function normalizeSegment(raw, context, defaultSegment, vibrationConfig) {
   );
 
   const durationSource = raw.time != null ? raw.time : defaultSegment.time;
-  const durationMs = normalizeSegmentDurationMs(durationSource);
+  const durationMs = defaultSegment.time === TRUE_STOPWATCH_DURATION_MS && raw.time == null
+    ? TRUE_STOPWATCH_DURATION_MS
+    : normalizeSegmentDurationMs(durationSource, `${context} time`);
   const segmentVibrate = raw.vibrate != null
     ? normalizeVibrate(raw.vibrate, vibrationConfig)
     : defaultSegment.vibrate;
@@ -644,21 +651,21 @@ function normalizeSegment(raw, context, defaultSegment, vibrationConfig) {
   };
 }
 
-function normalizeFinishVibrate(raw, index, vibrationConfig) {
+function normalizeFinishVibrate(raw, timerContext, vibrationConfig) {
   if (raw == null) {
     return [];
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`timer ${index + 1} on-finished must be an inline table`);
+    throw new Error(`${timerContext} on-finished must be an inline table`);
   }
-  assertAllowedKeys(raw, ["vibrate"], `timer ${index + 1} on-finished`);
+  assertAllowedKeys(raw, ["vibrate"], `${timerContext} on-finished`);
   if (raw.vibrate == null) {
-    throw new Error(`timer ${index + 1} on-finished must define vibrate`);
+    throw new Error(`${timerContext} on-finished must define vibrate`);
   }
   return normalizeVibrate(raw.vibrate, vibrationConfig);
 }
 
-function normalizeUpAction(raw, fieldName, index, defaultKind) {
+function normalizeUpAction(raw, fieldName, timerContext, index, defaultKind) {
   if (raw == null) {
     return { kind: defaultKind == null ? UP_ACTION_NONE : defaultKind, durationMs: 0 };
   }
@@ -666,7 +673,7 @@ function normalizeUpAction(raw, fieldName, index, defaultKind) {
   if (typeof raw === "string") {
     const kind = parseUpActionKind(raw, fieldName, index);
     if (kind === UP_ACTION_INCREMENT || kind === UP_ACTION_DECREMENT) {
-      throw new Error(`timer ${index + 1} ${fieldName} must use an inline table for ${raw}`);
+      throw new Error(`${timerContext} ${fieldName} must use an inline table for ${raw}`);
     }
     return {
       kind: kind,
@@ -675,29 +682,31 @@ function normalizeUpAction(raw, fieldName, index, defaultKind) {
   }
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`timer ${index + 1} ${fieldName} must be a string or inline table`);
+    throw new Error(`${timerContext} ${fieldName} must be a string or inline table`);
   }
-  assertAllowedKeys(raw, ["action", "time"], `timer ${index + 1} ${fieldName}`);
+  assertAllowedKeys(raw, ["action", "time"], `${timerContext} ${fieldName}`);
 
   const kind = parseUpActionKind(raw.action, fieldName, index);
   const needsTime = kind === UP_ACTION_INCREMENT || kind === UP_ACTION_DECREMENT;
   if (needsTime && raw.time == null) {
-    throw new Error(`timer ${index + 1} ${fieldName} must define time for ${raw.action}`);
+    throw new Error(`${timerContext} ${fieldName} must define time for ${raw.action}`);
   }
   if (!needsTime && raw.time != null) {
-    throw new Error(`timer ${index + 1} ${fieldName} only supports time with increment/decrement`);
+    throw new Error(`${timerContext} ${fieldName} only supports time with increment/decrement`);
   }
 
   return {
     kind: kind,
-    durationMs: needsTime ? normalizeSegmentDurationMs(raw.time) : 0,
+    durationMs: needsTime ? normalizeSegmentDurationMs(raw.time, `${timerContext} ${fieldName} time`) : 0,
   };
 }
 
-function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
+function normalizeTimer(raw, index, timerKey, fallbackName, vibrationConfig) {
+  const timerContext = timerKey ? `timer ${index + 1} [timers.${timerKey}]` : `timer ${index + 1}`;
   assertAllowedKeys(raw, [
     "name",
     "repeat",
+    "stopwatch",
     "trigger",
     "pattern",
     "hint",
@@ -711,57 +720,68 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
     "must-acknowledge",
     "repeat-pattern-delay",
     "acknowledgment-alert-duration",
-  ], `timer ${index + 1}`);
+  ], timerContext);
+  if (raw.stopwatch != null && typeof raw.stopwatch !== "boolean") {
+    throw new Error(`${timerContext} stopwatch must be true or false`);
+  }
+  const stopwatch = raw.stopwatch === true;
+  const stopwatchOnly = stopwatch && raw.time == null && raw.pattern == null;
   if (raw.time != null && raw.pattern != null) {
-    throw new Error(`timer ${index + 1} cannot define both time and pattern`);
+    throw new Error(`${timerContext} cannot define both time and pattern`);
   }
   if (raw.pattern != null && (!Array.isArray(raw.pattern) || raw.pattern.length === 0)) {
-    throw new Error(`timer ${index + 1} pattern must be a non-empty array`);
+    throw new Error(`${timerContext} pattern must be a non-empty array`);
   }
-  if (raw.time == null && raw.pattern == null) {
-    throw new Error(`timer ${index + 1} must define time or pattern`);
+  if (!stopwatchOnly && raw.time == null && raw.pattern == null) {
+    throw new Error(`${timerContext} must define time or pattern`);
+  }
+  if (stopwatchOnly && raw["on-finished"] != null) {
+    throw new Error(`${timerContext} true stopwatch cannot use on-finished`);
   }
   const rawRepeat = raw.repeat;
   const repeatForever = rawRepeat === true;
   const repeatCount = typeof rawRepeat === "number" ? Math.max(1, Number(rawRepeat) | 0) : 0;
-  const repeat = repeatForever || repeatCount > 0;
-  const finishVibrate = normalizeFinishVibrate(raw["on-finished"], index, vibrationConfig);
+  const repeat = !stopwatchOnly && (repeatForever || repeatCount > 0);
+  const finishVibrate = normalizeFinishVibrate(raw["on-finished"], timerContext, vibrationConfig);
   const defaultVibrate = normalizeVibrate(raw.vibrate, vibrationConfig);
   const defaultSegment = {
     hint: raw.hint == null ? "" : String(raw.hint),
-    time: raw.time,
+    time: stopwatchOnly ? TRUE_STOPWATCH_DURATION_MS : raw.time,
     vibrate: defaultVibrate,
-    warnAt: raw["warn-at"],
+    warnAt: stopwatchOnly ? null : raw["warn-at"],
   };
   if (repeatForever && finishVibrate.length > 0) {
-    throw new Error(`timer ${index + 1} cannot use on-finished with repeat = true`);
+    throw new Error(`${timerContext} cannot use on-finished with repeat = true`);
   }
   if (raw["must-acknowledge"] != null && typeof raw["must-acknowledge"] !== "boolean") {
-    throw new Error(`timer ${index + 1} must-acknowledge must be true or false`);
+    throw new Error(`${timerContext} must-acknowledge must be true or false`);
   }
-  const onPressUp = normalizeUpAction(raw["on-press-up"], "on-press-up", index);
-  const onLongPressUp = normalizeUpAction(raw["on-long-press-up"], "on-long-press-up", index);
+  const onPressUp = normalizeUpAction(raw["on-press-up"], "on-press-up", timerContext, index);
+  const onLongPressUp = normalizeUpAction(raw["on-long-press-up"], "on-long-press-up", timerContext, index);
   const onLongPressSelect = normalizeUpAction(
     raw["on-long-press-select"],
     "on-long-press-select",
+    timerContext,
     index,
     UP_ACTION_HIDE
   );
   return {
     name: raw.name == null ? String(fallbackName || `Timer ${index + 1}`) : String(raw.name),
     repeat: repeat,
-    iterationsEnabled: repeatCount > 0,
-    iterations: repeatCount,
+    stopwatch: stopwatch,
+    stopwatchOnly: stopwatchOnly,
+    iterationsEnabled: !stopwatchOnly && repeatCount > 0,
+    iterations: stopwatchOnly ? 0 : repeatCount,
     onPressUp: onPressUp,
     onLongPressUp: onLongPressUp,
     onLongPressSelect: onLongPressSelect,
     mustAcknowledge: raw["must-acknowledge"] === true,
-    repeatPatternDelay: normalizeRepeatPatternDelay(raw["repeat-pattern-delay"], index),
+    repeatPatternDelay: normalizeRepeatPatternDelay(raw["repeat-pattern-delay"], timerContext),
     acknowledgeAlertDuration: normalizeAckAlertDuration(
       raw["acknowledgment-alert-duration"] == null
         ? vibrationConfig.acknowledgeAlertDuration
         : raw["acknowledgment-alert-duration"],
-      index
+      timerContext
     ),
     finishVibrate: finishVibrate,
     trigger: normalizeTrigger(raw.trigger),
@@ -769,12 +789,12 @@ function normalizeTimer(raw, index, fallbackName, vibrationConfig) {
       ? raw.pattern.map(function(segment, segmentIndex) {
         return normalizeSegment(
           segment,
-          `timer ${index + 1} pattern ${segmentIndex + 1}`,
+          `${timerContext} pattern ${segmentIndex + 1}`,
           defaultSegment,
           vibrationConfig
         );
       })
-      : [normalizeSegment({}, `timer ${index + 1}`, defaultSegment, vibrationConfig)],
+      : [normalizeSegment({}, timerContext, defaultSegment, vibrationConfig)],
   };
 }
 
@@ -838,6 +858,7 @@ function parseTimerToml(toml) {
       return normalizeTimer(
         parseAssignments(section.lines.join("\n")),
         index,
+        section.name,
         titleCaseKey(section.name),
         vibrationConfig
       );
@@ -897,7 +918,9 @@ function sendTimerAt(timers, timerIndex) {
   const timer = timers[timerIndex];
   const flags = (timer.repeat ? 1 : 0) |
     (timer.iterationsEnabled ? 2 : 0) |
-    (timer.mustAcknowledge ? 4 : 0);
+    (timer.mustAcknowledge ? 4 : 0) |
+    (timer.stopwatch ? 8 : 0) |
+    (timer.stopwatchOnly ? 16 : 0);
   const payload = {};
   payload[KEY_CFG_OP] = CFG_OP_TIMER;
   payload[KEY_CFG_TIMER] = timerIndex;

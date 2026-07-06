@@ -78,6 +78,16 @@
         },
         {
           "type": "bitmap",
+          "name": "IMAGE_STOPWATCH_PLAY",
+          "file": "stopwatch-play.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_STOPWATCH_PAUSE",
+          "file": "stopwatch-pause.png"
+        },
+        {
+          "type": "bitmap",
           "name": "IMAGE_SKIP",
           "file": "skip.png"
         },

@@ -58,6 +58,7 @@ pattern = [
 name = "Long\nBreak"
 repeat = false
 trigger = { swipe = "c-to-b" }
+stopwatch = true
 on-press-up = { action = "decrement", time = "00:01:00" }
 on-long-press-up = { action = "increment", time = "00:01:00" }
 on-finished = { vibrate = [ { intensity = "low" }, { duration = 200 }, { intensity = "high" } ] }
@@ -65,3 +66,13 @@ hint = "walk away"
 time = "00:15:00"
 vibrate = { intensity = "high" }
 warn-at = "00:01:00"
+
+[timers.stopwatch]
+trigger = { tap = "center" }
+stopwatch = true
+on-press-up = "hide"
+
+[timers.focus-as-stopwatch]
+trigger = { swipe = "down" }
+time = "00:20:00"
+on-long-press-select = "stopwatch"

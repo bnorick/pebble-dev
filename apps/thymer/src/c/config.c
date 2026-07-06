@@ -183,6 +183,8 @@ static bool prv_copy_timer_definition(TimerDefinition *dst, const TimerDefinitio
   dst->repeat = src->repeat;
   dst->iterations_enabled = src->iterations_enabled;
   dst->must_acknowledge = src->must_acknowledge;
+  dst->stopwatch = src->stopwatch;
+  dst->stopwatch_only = src->stopwatch_only;
   dst->on_press_up = src->on_press_up;
   dst->on_long_press_up = src->on_long_press_up;
   dst->on_long_press_select = src->on_long_press_select;
@@ -263,6 +265,8 @@ static bool prv_timers_equal(const TimerDefinition *a, const TimerDefinition *b)
       a->repeat != b->repeat ||
       a->iterations_enabled != b->iterations_enabled ||
       a->must_acknowledge != b->must_acknowledge ||
+      a->stopwatch != b->stopwatch ||
+      a->stopwatch_only != b->stopwatch_only ||
       a->on_press_up.kind != b->on_press_up.kind ||
       a->on_press_up.duration_ms != b->on_press_up.duration_ms ||
       a->on_long_press_up.kind != b->on_long_press_up.kind ||
@@ -326,6 +330,8 @@ static bool prv_set_default_timer(TimerDefinition *timer) {
   util_copy_string(timer->name, sizeof(timer->name), "Timer 1");
   timer->repeat = true;
   timer->iterations_enabled = false;
+  timer->stopwatch = false;
+  timer->stopwatch_only = false;
   timer->on_long_press_select.kind = UP_ACTION_HIDE;
   timer->iterations = 0;
   timer->repeat_pattern_delay_ms = DEFAULT_REPEAT_PATTERN_DELAY_MS;
@@ -426,6 +432,8 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
     timer->repeat = (timer_record.flags & TIMER_FLAG_REPEAT) != 0;
     timer->iterations_enabled = (timer_record.flags & TIMER_FLAG_ITERATIONS_ENABLED) != 0;
     timer->must_acknowledge = (timer_record.flags & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0;
+    timer->stopwatch = (timer_record.flags & TIMER_FLAG_STOPWATCH) != 0;
+    timer->stopwatch_only = (timer_record.flags & TIMER_FLAG_STOPWATCH_ONLY) != 0;
     timer->on_press_up.kind = util_clamp_up_action(timer_record.on_press_up);
     timer->on_press_up.duration_ms = timer_record.on_press_up_duration_ms;
     timer->on_long_press_up.kind = util_clamp_up_action(timer_record.on_long_press_up);
@@ -550,7 +558,9 @@ void config_persist_config(void) {
       util_copy_string(timer_record.name, sizeof(timer_record.name), timer->name);
       timer_record.flags = (timer->repeat ? TIMER_FLAG_REPEAT : 0) |
                            (timer->iterations_enabled ? TIMER_FLAG_ITERATIONS_ENABLED : 0) |
-                           (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0);
+                           (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0) |
+                           (timer->stopwatch ? TIMER_FLAG_STOPWATCH : 0) |
+                           (timer->stopwatch_only ? TIMER_FLAG_STOPWATCH_ONLY : 0);
       timer_record.on_press_up = (uint8_t)timer->on_press_up.kind;
       timer_record.on_press_up_duration_ms = timer->on_press_up.duration_ms;
       timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up.kind;
@@ -635,6 +645,7 @@ void config_load_state(void) {
       s_state.active = false;
       s_state.running = false;
       s_state.completed = false;
+      s_state.active_stopwatch = false;
     }
     return;
   }
@@ -844,6 +855,10 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       ? ((flags_tuple->value->int32 & TIMER_FLAG_ITERATIONS_ENABLED) != 0) : false;
     timer->must_acknowledge = flags_tuple
       ? ((flags_tuple->value->int32 & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0) : false;
+    timer->stopwatch = flags_tuple
+      ? ((flags_tuple->value->int32 & TIMER_FLAG_STOPWATCH) != 0) : false;
+    timer->stopwatch_only = flags_tuple
+      ? ((flags_tuple->value->int32 & TIMER_FLAG_STOPWATCH_ONLY) != 0) : false;
     timer->on_press_up.kind = up_action_tuple
       ? util_clamp_up_action(up_action_tuple->value->int32) : UP_ACTION_NONE;
     timer->on_press_up.duration_ms = 0;
