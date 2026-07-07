@@ -12,6 +12,7 @@
 #define MAX_SEGMENT_NAME_LEN 40
 #define MAX_HINT_LEN 28
 #define MAX_VIBE_STEPS 4
+#define MAX_WARN_ATS 4
 #define MAX_VIBE_PATTERN_PARTS (MAX_VIBE_STEPS * 2)
 #define FINISH_VIBE_SEGMENT 255
 #define DEFAULT_REPEAT_PATTERN_DELAY_MS 500
@@ -20,6 +21,8 @@
 #define TIMER_FLAG_REPEAT 0x1
 #define TIMER_FLAG_ITERATIONS_ENABLED 0x2
 #define TIMER_FLAG_MUST_ACKNOWLEDGE 0x4
+#define TIMER_FLAG_STOPWATCH 0x8
+#define TIMER_FLAG_STOPWATCH_ONLY 0x10
 
 #define PERSIST_KEY_CONFIG_META 100
 #define PERSIST_KEY_STATE 101
@@ -27,7 +30,7 @@
 #define PERSIST_KEY_SEGMENT_BASE 300
 
 #define WAKEUP_COOKIE_FINISH 1
-#define CONFIG_VERSION 13
+#define CONFIG_VERSION 16
 #define BUTTON_HINT_ICON_SIZE 28
 #define BUTTON_HINT_ICON_HALF (BUTTON_HINT_ICON_SIZE / 2)
 #define BUTTON_HINT_WIDTH 30
@@ -79,6 +82,18 @@
 #ifndef MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME
 #define MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME 10022
 #endif
+#ifndef MESSAGE_KEY_CFG_SELECT_LONG_ACTION
+#define MESSAGE_KEY_CFG_SELECT_LONG_ACTION 10023
+#endif
+#ifndef MESSAGE_KEY_CFG_SELECT_LONG_ACTION_TIME
+#define MESSAGE_KEY_CFG_SELECT_LONG_ACTION_TIME 10024
+#endif
+#ifndef MESSAGE_KEY_CFG_WARN
+#define MESSAGE_KEY_CFG_WARN 10025
+#endif
+#ifndef MESSAGE_KEY_CFG_WARN_TIME
+#define MESSAGE_KEY_CFG_WARN_TIME 10026
+#endif
 
 typedef enum {
   CFG_OP_BEGIN = 1,
@@ -88,6 +103,7 @@ typedef enum {
   CFG_OP_COMMIT = 5,
   CFG_OP_ERROR = 6,
   CFG_OP_UI = 7,
+  CFG_OP_WARN = 8,
 } ConfigOp;
 
 typedef enum {
@@ -118,7 +134,8 @@ typedef enum {
   UP_ACTION_HIDE = 2,
   UP_ACTION_INCREMENT = 3,
   UP_ACTION_DECREMENT = 4,
-  UP_ACTION_MUTE = 5,
+  UP_ACTION_STOPWATCH = 5,
+  UP_ACTION_MUTE = 6,
 } UpAction;
 
 typedef struct {
@@ -133,11 +150,19 @@ typedef struct {
 } VibeStep;
 
 typedef struct {
+  uint64_t time_before_end_ms;
+  uint8_t vibe_count;
+  VibeStep vibes[MAX_VIBE_STEPS];
+} SegmentWarning;
+
+typedef struct {
   char name[MAX_SEGMENT_NAME_LEN];
   char hint[MAX_HINT_LEN];
   uint64_t duration_ms;
   uint8_t vibe_count;
+  uint8_t warn_count;
   VibeStep vibes[MAX_VIBE_STEPS];
+  SegmentWarning warns[MAX_WARN_ATS];
 } TimerSegment;
 
 typedef struct {
@@ -145,8 +170,11 @@ typedef struct {
   bool repeat;
   bool iterations_enabled;
   bool must_acknowledge;
+  bool stopwatch;
+  bool stopwatch_only;
   UpActionDefinition on_press_up;
   UpActionDefinition on_long_press_up;
+  UpActionDefinition on_long_press_select;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;
@@ -176,8 +204,10 @@ typedef struct __attribute__((__packed__)) {
   uint8_t flags;
   uint8_t on_press_up;
   uint8_t on_long_press_up;
+  uint8_t on_long_press_select;
   uint64_t on_press_up_duration_ms;
   uint64_t on_long_press_up_duration_ms;
+  uint64_t on_long_press_select_duration_ms;
   uint16_t iterations;
   uint16_t repeat_pattern_delay_ms;
   uint16_t acknowledge_alert_duration_s;
@@ -190,20 +220,29 @@ typedef struct __attribute__((__packed__)) {
 } PersistTimerRecord;
 
 typedef struct __attribute__((__packed__)) {
+  uint64_t time_before_end_ms;
+  uint8_t vibe_count;
+  PersistVibeStep vibes[MAX_VIBE_STEPS];
+} PersistSegmentWarning;
+
+typedef struct __attribute__((__packed__)) {
   char name[MAX_SEGMENT_NAME_LEN];
   char hint[MAX_HINT_LEN];
   uint64_t duration_ms;
   uint8_t vibe_count;
+  uint8_t warn_count;
   PersistVibeStep vibes[MAX_VIBE_STEPS];
+  PersistSegmentWarning warns[MAX_WARN_ATS];
 } PersistSegmentRecord;
 
 typedef struct {
   uint16_t version;
   uint8_t timer_count;
+  uint8_t timer_capacity;
   bool icons_enabled;
   bool background_enabled;
   bool timer_accent_enabled;
-  TimerDefinition timers[MAX_TIMERS];
+  TimerDefinition *timers;
 } TimerConfig;
 
 typedef struct {
@@ -214,6 +253,7 @@ typedef struct {
   bool alert_fired;
   bool awaiting_ack;
   bool ack_silenced;
+  bool active_stopwatch;
   uint8_t selected_timer;
   uint8_t active_timer;
   uint64_t started_at_ms;
@@ -224,10 +264,11 @@ typedef struct {
 
 typedef struct {
   uint8_t timer_count;
+  uint8_t timer_capacity;
   bool icons_enabled;
   bool background_enabled;
   bool timer_accent_enabled;
-  TimerDefinition timers[MAX_TIMERS];
+  TimerDefinition *timers;
 } PendingConfig;
 
 typedef struct {

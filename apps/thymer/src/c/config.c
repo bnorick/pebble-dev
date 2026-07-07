@@ -65,6 +65,22 @@ static void prv_copy_vibe_from_persist(VibeStep *dst, const PersistVibeStep *src
   dst->delay_ms = src->delay_ms;
 }
 
+static void prv_copy_warning_to_persist(PersistSegmentWarning *dst, const SegmentWarning *src) {
+  dst->time_before_end_ms = src->time_before_end_ms;
+  dst->vibe_count = src->vibe_count;
+  for (uint8_t i = 0; i < src->vibe_count && i < MAX_VIBE_STEPS; ++i) {
+    prv_copy_vibe_to_persist(&dst->vibes[i], &src->vibes[i]);
+  }
+}
+
+static void prv_copy_warning_from_persist(SegmentWarning *dst, const PersistSegmentWarning *src) {
+  dst->time_before_end_ms = src->time_before_end_ms;
+  dst->vibe_count = (uint8_t)util_clamp_i32(src->vibe_count, 0, MAX_VIBE_STEPS);
+  for (uint8_t i = 0; i < dst->vibe_count; ++i) {
+    prv_copy_vibe_from_persist(&dst->vibes[i], &src->vibes[i]);
+  }
+}
+
 static void prv_reset_timer_definition(TimerDefinition *timer) {
   if (!timer) {
     return;
@@ -73,11 +89,11 @@ static void prv_reset_timer_definition(TimerDefinition *timer) {
   memset(timer, 0, sizeof(*timer));
 }
 
-static void prv_reset_timer_array(TimerDefinition *timers) {
-  if (!timers) {
+static void prv_reset_timer_array(TimerDefinition *timers, uint8_t count) {
+  if (!timers || count == 0) {
     return;
   }
-  for (uint8_t i = 0; i < MAX_TIMERS; ++i) {
+  for (uint8_t i = 0; i < count; ++i) {
     prv_reset_timer_definition(&timers[i]);
   }
 }
@@ -86,7 +102,8 @@ static void prv_reset_config(TimerConfig *config) {
   if (!config) {
     return;
   }
-  prv_reset_timer_array(config->timers);
+  prv_reset_timer_array(config->timers, config->timer_capacity);
+  free(config->timers);
   memset(config, 0, sizeof(*config));
 }
 
@@ -94,7 +111,8 @@ static void prv_reset_pending_config(PendingConfig *config) {
   if (!config) {
     return;
   }
-  prv_reset_timer_array(config->timers);
+  prv_reset_timer_array(config->timers, config->timer_capacity);
+  free(config->timers);
   memset(config, 0, sizeof(*config));
 }
 
@@ -103,13 +121,35 @@ static void prv_swap_configs(TimerConfig *a, TimerConfig *b) {
     return;
   }
 
-  uint8_t *a_bytes = (uint8_t *)a;
-  uint8_t *b_bytes = (uint8_t *)b;
-  for (size_t i = 0; i < sizeof(TimerConfig); ++i) {
-    uint8_t tmp = a_bytes[i];
-    a_bytes[i] = b_bytes[i];
-    b_bytes[i] = tmp;
+  TimerConfig tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+
+static bool prv_ensure_timer_capacity(TimerDefinition **timers,
+                                      uint8_t *capacity,
+                                      uint8_t required_count) {
+  if (!timers || !capacity) {
+    return false;
   }
+  if (required_count == 0) {
+    return true;
+  }
+  if (*capacity >= required_count && *timers) {
+    return true;
+  }
+
+  TimerDefinition *resized = realloc(*timers, sizeof(TimerDefinition) * required_count);
+  if (!resized) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "timer allocation failed count=%u", (unsigned)required_count);
+    return false;
+  }
+  if (required_count > *capacity) {
+    memset(&resized[*capacity], 0, sizeof(TimerDefinition) * (required_count - *capacity));
+  }
+  *timers = resized;
+  *capacity = required_count;
+  return true;
 }
 
 static bool prv_allocate_segments(TimerDefinition *timer, uint8_t segment_count) {
@@ -143,8 +183,11 @@ static bool prv_copy_timer_definition(TimerDefinition *dst, const TimerDefinitio
   dst->repeat = src->repeat;
   dst->iterations_enabled = src->iterations_enabled;
   dst->must_acknowledge = src->must_acknowledge;
+  dst->stopwatch = src->stopwatch;
+  dst->stopwatch_only = src->stopwatch_only;
   dst->on_press_up = src->on_press_up;
   dst->on_long_press_up = src->on_long_press_up;
+  dst->on_long_press_select = src->on_long_press_select;
   dst->iterations = src->iterations;
   dst->repeat_pattern_delay_ms = src->repeat_pattern_delay_ms;
   dst->acknowledge_alert_duration_s = src->acknowledge_alert_duration_s;
@@ -186,7 +229,8 @@ static bool prv_timer_segments_equal(const TimerDefinition *a, const TimerDefini
     if (strncmp(left->name, right->name, MAX_SEGMENT_NAME_LEN) != 0 ||
         strncmp(left->hint, right->hint, MAX_HINT_LEN) != 0 ||
         left->duration_ms != right->duration_ms ||
-        left->vibe_count != right->vibe_count) {
+        left->vibe_count != right->vibe_count ||
+        left->warn_count != right->warn_count) {
       return false;
     }
     for (uint8_t vibe_index = 0; vibe_index < left->vibe_count; ++vibe_index) {
@@ -194,6 +238,21 @@ static bool prv_timer_segments_equal(const TimerDefinition *a, const TimerDefini
           left->vibes[vibe_index].duration_ms != right->vibes[vibe_index].duration_ms ||
           left->vibes[vibe_index].delay_ms != right->vibes[vibe_index].delay_ms) {
         return false;
+      }
+    }
+    for (uint8_t warn_index = 0; warn_index < left->warn_count; ++warn_index) {
+      const SegmentWarning *left_warn = &left->warns[warn_index];
+      const SegmentWarning *right_warn = &right->warns[warn_index];
+      if (left_warn->time_before_end_ms != right_warn->time_before_end_ms ||
+          left_warn->vibe_count != right_warn->vibe_count) {
+        return false;
+      }
+      for (uint8_t vibe_index = 0; vibe_index < left_warn->vibe_count; ++vibe_index) {
+        if (left_warn->vibes[vibe_index].intensity != right_warn->vibes[vibe_index].intensity ||
+            left_warn->vibes[vibe_index].duration_ms != right_warn->vibes[vibe_index].duration_ms ||
+            left_warn->vibes[vibe_index].delay_ms != right_warn->vibes[vibe_index].delay_ms) {
+          return false;
+        }
       }
     }
   }
@@ -206,10 +265,14 @@ static bool prv_timers_equal(const TimerDefinition *a, const TimerDefinition *b)
       a->repeat != b->repeat ||
       a->iterations_enabled != b->iterations_enabled ||
       a->must_acknowledge != b->must_acknowledge ||
+      a->stopwatch != b->stopwatch ||
+      a->stopwatch_only != b->stopwatch_only ||
       a->on_press_up.kind != b->on_press_up.kind ||
       a->on_press_up.duration_ms != b->on_press_up.duration_ms ||
       a->on_long_press_up.kind != b->on_long_press_up.kind ||
       a->on_long_press_up.duration_ms != b->on_long_press_up.duration_ms ||
+      a->on_long_press_select.kind != b->on_long_press_select.kind ||
+      a->on_long_press_select.duration_ms != b->on_long_press_select.duration_ms ||
       a->iterations != b->iterations ||
       a->repeat_pattern_delay_ms != b->repeat_pattern_delay_ms ||
       a->acknowledge_alert_duration_s != b->acknowledge_alert_duration_s ||
@@ -267,6 +330,9 @@ static bool prv_set_default_timer(TimerDefinition *timer) {
   util_copy_string(timer->name, sizeof(timer->name), "Timer 1");
   timer->repeat = true;
   timer->iterations_enabled = false;
+  timer->stopwatch = false;
+  timer->stopwatch_only = false;
+  timer->on_long_press_select.kind = UP_ACTION_HIDE;
   timer->iterations = 0;
   timer->repeat_pattern_delay_ms = DEFAULT_REPEAT_PATTERN_DELAY_MS;
   timer->acknowledge_alert_duration_s = DEFAULT_ACK_ALERT_DURATION_S;
@@ -329,10 +395,15 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
 
   out->version = CONFIG_VERSION;
   out->timer_count = meta.timer_count;
+  out->timer_capacity = 0;
   bool legacy_ui_flags = (meta.ui_flags & ~(uint8_t)CONFIG_FLAG_ICONS) == 0;
   out->icons_enabled = (meta.ui_flags & CONFIG_FLAG_ICONS) != 0;
   out->background_enabled = legacy_ui_flags || (meta.ui_flags & CONFIG_FLAG_BACKGROUND) != 0;
   out->timer_accent_enabled = legacy_ui_flags || (meta.ui_flags & CONFIG_FLAG_TIMER_ACCENT) != 0;
+  if (!prv_ensure_timer_capacity(&out->timers, &out->timer_capacity, meta.timer_count)) {
+    snprintf(reason, reason_len, "Timer array allocation failed");
+    goto fail;
+  }
 
   for (uint8_t timer_index = 0; timer_index < meta.timer_count; ++timer_index) {
     PersistTimerRecord timer_record = {0};
@@ -361,10 +432,14 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
     timer->repeat = (timer_record.flags & TIMER_FLAG_REPEAT) != 0;
     timer->iterations_enabled = (timer_record.flags & TIMER_FLAG_ITERATIONS_ENABLED) != 0;
     timer->must_acknowledge = (timer_record.flags & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0;
+    timer->stopwatch = (timer_record.flags & TIMER_FLAG_STOPWATCH) != 0;
+    timer->stopwatch_only = (timer_record.flags & TIMER_FLAG_STOPWATCH_ONLY) != 0;
     timer->on_press_up.kind = util_clamp_up_action(timer_record.on_press_up);
     timer->on_press_up.duration_ms = timer_record.on_press_up_duration_ms;
     timer->on_long_press_up.kind = util_clamp_up_action(timer_record.on_long_press_up);
     timer->on_long_press_up.duration_ms = timer_record.on_long_press_up_duration_ms;
+    timer->on_long_press_select.kind = util_clamp_up_action(timer_record.on_long_press_select);
+    timer->on_long_press_select.duration_ms = timer_record.on_long_press_select_duration_ms;
     timer->iterations = timer_record.iterations;
     timer->repeat_pattern_delay_ms = timer_record.repeat_pattern_delay_ms;
     timer->acknowledge_alert_duration_s = timer_record.acknowledge_alert_duration_s;
@@ -398,12 +473,13 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
         goto fail;
       }
 
-      if (segment_record.vibe_count > MAX_VIBE_STEPS) {
+      if (segment_record.vibe_count > MAX_VIBE_STEPS ||
+          segment_record.warn_count > MAX_WARN_ATS) {
         snprintf(reason, reason_len, "Seg %u/%u invalid vibe_count",
                  (unsigned)timer_index, (unsigned)segment_index);
-        APP_LOG(APP_LOG_LEVEL_ERROR, "persist segment %u/%u invalid vibe_count=%u",
+        APP_LOG(APP_LOG_LEVEL_ERROR, "persist segment %u/%u invalid vibe_count=%u warn_count=%u",
                 (unsigned)timer_index, (unsigned)segment_index,
-                (unsigned)segment_record.vibe_count);
+                (unsigned)segment_record.vibe_count, (unsigned)segment_record.warn_count);
         goto fail;
       }
 
@@ -412,8 +488,12 @@ static bool prv_try_load_persisted_config(TimerConfig *out, char *reason, size_t
       util_copy_string(segment->hint, sizeof(segment->hint), segment_record.hint);
       segment->duration_ms = segment_record.duration_ms;
       segment->vibe_count = segment_record.vibe_count;
+      segment->warn_count = segment_record.warn_count;
       for (uint8_t i = 0; i < segment->vibe_count; ++i) {
         prv_copy_vibe_from_persist(&segment->vibes[i], &segment_record.vibes[i]);
+      }
+      for (uint8_t i = 0; i < segment->warn_count; ++i) {
+        prv_copy_warning_from_persist(&segment->warns[i], &segment_record.warns[i]);
       }
     }
   }
@@ -445,6 +525,9 @@ void config_deinit(void) {
 void config_default_config(void) {
   prv_reset_config(&s_config);
   prv_init_default_header(&s_config);
+  if (!prv_ensure_timer_capacity(&s_config.timers, &s_config.timer_capacity, 1)) {
+    return;
+  }
   s_config.timer_count = 1;
   if (!prv_set_default_timer(&s_config.timers[0])) {
     s_config.timer_count = 0;
@@ -475,11 +558,15 @@ void config_persist_config(void) {
       util_copy_string(timer_record.name, sizeof(timer_record.name), timer->name);
       timer_record.flags = (timer->repeat ? TIMER_FLAG_REPEAT : 0) |
                            (timer->iterations_enabled ? TIMER_FLAG_ITERATIONS_ENABLED : 0) |
-                           (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0);
+                           (timer->must_acknowledge ? TIMER_FLAG_MUST_ACKNOWLEDGE : 0) |
+                           (timer->stopwatch ? TIMER_FLAG_STOPWATCH : 0) |
+                           (timer->stopwatch_only ? TIMER_FLAG_STOPWATCH_ONLY : 0);
       timer_record.on_press_up = (uint8_t)timer->on_press_up.kind;
       timer_record.on_press_up_duration_ms = timer->on_press_up.duration_ms;
       timer_record.on_long_press_up = (uint8_t)timer->on_long_press_up.kind;
       timer_record.on_long_press_up_duration_ms = timer->on_long_press_up.duration_ms;
+      timer_record.on_long_press_select = (uint8_t)timer->on_long_press_select.kind;
+      timer_record.on_long_press_select_duration_ms = timer->on_long_press_select.duration_ms;
       timer_record.iterations = timer->iterations;
       timer_record.repeat_pattern_delay_ms = timer->repeat_pattern_delay_ms;
       timer_record.acknowledge_alert_duration_s = timer->acknowledge_alert_duration_s;
@@ -502,8 +589,12 @@ void config_persist_config(void) {
         util_copy_string(segment_record.hint, sizeof(segment_record.hint), segment->hint);
         segment_record.duration_ms = segment->duration_ms;
         segment_record.vibe_count = segment->vibe_count;
+        segment_record.warn_count = segment->warn_count;
         for (uint8_t i = 0; i < segment->vibe_count; ++i) {
           prv_copy_vibe_to_persist(&segment_record.vibes[i], &segment->vibes[i]);
+        }
+        for (uint8_t i = 0; i < segment->warn_count; ++i) {
+          prv_copy_warning_to_persist(&segment_record.warns[i], &segment->warns[i]);
         }
         persist_write_data(key, &segment_record, sizeof(segment_record));
       }
@@ -554,6 +645,7 @@ void config_load_state(void) {
       s_state.active = false;
       s_state.running = false;
       s_state.completed = false;
+      s_state.active_stopwatch = false;
     }
     return;
   }
@@ -578,6 +670,9 @@ static void prv_reset_runtime_for_new_config(void) {
 static void prv_build_default_candidate(TimerConfig *config) {
   prv_reset_config(config);
   prv_init_default_header(config);
+  if (!prv_ensure_timer_capacity(&config->timers, &config->timer_capacity, 1)) {
+    return;
+  }
   config->timer_count = 1;
   if (!prv_set_default_timer(&config->timers[0])) {
     config->timer_count = 0;
@@ -591,6 +686,10 @@ static bool prv_build_config_from_pending(TimerConfig *config) {
   config->background_enabled = s_pending_config.background_enabled;
   config->timer_accent_enabled = s_pending_config.timer_accent_enabled;
   config->timer_count = s_pending_config.timer_count;
+  if (!prv_ensure_timer_capacity(&config->timers, &config->timer_capacity, config->timer_count)) {
+    prv_build_default_candidate(config);
+    return false;
+  }
 
   for (uint8_t timer_index = 0; timer_index < s_pending_config.timer_count; ++timer_index) {
     if (!prv_copy_timer_definition(&config->timers[timer_index],
@@ -689,6 +788,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     if (count_tuple) {
       s_pending_config.timer_count = (uint8_t)util_clamp_i32(count_tuple->value->int32,
                                                              0, MAX_TIMERS);
+      if (!prv_ensure_timer_capacity(&s_pending_config.timers,
+                                     &s_pending_config.timer_capacity,
+                                     s_pending_config.timer_count)) {
+        s_pending_config.timer_count = 0;
+      }
     }
     if (ui_flags_tuple) {
       s_pending_config.icons_enabled = (ui_flags_tuple->value->int32 & CONFIG_FLAG_ICONS) != 0;
@@ -723,13 +827,20 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *ack_duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_ACK_DURATION);
     Tuple *up_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION);
     Tuple *up_long_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION);
+    Tuple *select_long_action_tuple = dict_find(iter, MESSAGE_KEY_CFG_SELECT_LONG_ACTION);
     Tuple *up_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_ACTION_TIME);
     Tuple *up_long_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_UP_LONG_ACTION_TIME);
+    Tuple *select_long_action_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_SELECT_LONG_ACTION_TIME);
     if (!timer_tuple) {
       return;
     }
     uint8_t index = (uint8_t)timer_tuple->value->int32;
     if (index >= MAX_TIMERS) {
+      return;
+    }
+    if (!prv_ensure_timer_capacity(&s_pending_config.timers,
+                                   &s_pending_config.timer_capacity,
+                                   index + 1)) {
       return;
     }
     uint8_t segment_count = segment_count_tuple
@@ -744,6 +855,10 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       ? ((flags_tuple->value->int32 & TIMER_FLAG_ITERATIONS_ENABLED) != 0) : false;
     timer->must_acknowledge = flags_tuple
       ? ((flags_tuple->value->int32 & TIMER_FLAG_MUST_ACKNOWLEDGE) != 0) : false;
+    timer->stopwatch = flags_tuple
+      ? ((flags_tuple->value->int32 & TIMER_FLAG_STOPWATCH) != 0) : false;
+    timer->stopwatch_only = flags_tuple
+      ? ((flags_tuple->value->int32 & TIMER_FLAG_STOPWATCH_ONLY) != 0) : false;
     timer->on_press_up.kind = up_action_tuple
       ? util_clamp_up_action(up_action_tuple->value->int32) : UP_ACTION_NONE;
     timer->on_press_up.duration_ms = 0;
@@ -752,6 +867,11 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       ? util_clamp_up_action(up_long_action_tuple->value->int32) : UP_ACTION_NONE;
     timer->on_long_press_up.duration_ms = 0;
     (void)util_read_uint64_tuple(up_long_action_time_tuple, &timer->on_long_press_up.duration_ms);
+    timer->on_long_press_select.kind = select_long_action_tuple
+      ? util_clamp_up_action(select_long_action_tuple->value->int32) : UP_ACTION_HIDE;
+    timer->on_long_press_select.duration_ms = 0;
+    (void)util_read_uint64_tuple(select_long_action_time_tuple,
+                                 &timer->on_long_press_select.duration_ms);
     timer->iterations = iter_tuple
       ? (uint16_t)util_clamp_i32(iter_tuple->value->int32, 0, 65535) : 0;
     timer->repeat_pattern_delay_ms = repeat_pattern_delay_tuple
@@ -787,12 +907,14 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *text_tuple = dict_find(iter, MESSAGE_KEY_CFG_TEXT);
     Tuple *hint_tuple = dict_find(iter, MESSAGE_KEY_CFG_HINT);
     Tuple *alert_tuple = dict_find(iter, MESSAGE_KEY_CFG_ALERT);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
     if (!timer_tuple || !segment_tuple || !duration_tuple) {
       return;
     }
     uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
     uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
-    if (timer_index >= MAX_TIMERS) {
+    if (timer_index >= MAX_TIMERS || timer_index >= s_pending_config.timer_capacity ||
+        !s_pending_config.timers) {
       return;
     }
     TimerDefinition *timer = &s_pending_config.timers[timer_index];
@@ -807,12 +929,50 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     segment->duration_ms = duration_ms;
     segment->vibe_count = alert_tuple
       ? (uint8_t)util_clamp_i32(alert_tuple->value->int32, 0, MAX_VIBE_STEPS) : 0;
+    segment->warn_count = warn_tuple
+      ? (uint8_t)util_clamp_i32(warn_tuple->value->int32, 0, MAX_WARN_ATS) : 0;
     if (text_tuple && text_tuple->type == TUPLE_CSTRING) {
       util_copy_string(segment->name, sizeof(segment->name), text_tuple->value->cstring);
     }
     if (hint_tuple && hint_tuple->type == TUPLE_CSTRING) {
       util_copy_string(segment->hint, sizeof(segment->hint), hint_tuple->value->cstring);
     }
+    return;
+  }
+
+  if (op == CFG_OP_WARN) {
+    Tuple *timer_tuple = dict_find(iter, MESSAGE_KEY_CFG_TIMER);
+    Tuple *segment_tuple = dict_find(iter, MESSAGE_KEY_CFG_SEGMENT);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
+    Tuple *warn_time_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN_TIME);
+    Tuple *alert_tuple = dict_find(iter, MESSAGE_KEY_CFG_ALERT);
+    if (!timer_tuple || !segment_tuple || !warn_tuple || !warn_time_tuple) {
+      return;
+    }
+    uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
+    uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
+    uint8_t warn_index = (uint8_t)warn_tuple->value->int32;
+    if (timer_index >= MAX_TIMERS || warn_index >= MAX_WARN_ATS ||
+        timer_index >= s_pending_config.timer_capacity || !s_pending_config.timers) {
+      return;
+    }
+    TimerDefinition *timer = &s_pending_config.timers[timer_index];
+    if (segment_index >= timer->segment_count || !timer->segments) {
+      return;
+    }
+    TimerSegment *segment = &timer->segments[segment_index];
+    if (warn_index >= segment->warn_count) {
+      return;
+    }
+    SegmentWarning *warn = &segment->warns[warn_index];
+    uint64_t time_before_end_ms = 0;
+    if (!util_read_uint64_tuple(warn_time_tuple, &time_before_end_ms) ||
+        time_before_end_ms < 1 || time_before_end_ms >= segment->duration_ms) {
+      return;
+    }
+    warn->time_before_end_ms = time_before_end_ms;
+    warn->vibe_count = alert_tuple
+      ? (uint8_t)util_clamp_i32(alert_tuple->value->int32, 0, MAX_VIBE_STEPS) : 0;
     return;
   }
 
@@ -823,17 +983,35 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
     Tuple *intensity_tuple = dict_find(iter, MESSAGE_KEY_CFG_INTENSITY);
     Tuple *duration_tuple = dict_find(iter, MESSAGE_KEY_CFG_DURATION);
     Tuple *delay_tuple = dict_find(iter, MESSAGE_KEY_CFG_DELAY);
+    Tuple *warn_tuple = dict_find(iter, MESSAGE_KEY_CFG_WARN);
     if (!timer_tuple || !segment_tuple || !alert_tuple || !intensity_tuple || !duration_tuple) {
       return;
     }
     uint8_t timer_index = (uint8_t)timer_tuple->value->int32;
     uint8_t segment_index = (uint8_t)segment_tuple->value->int32;
     uint8_t alert_index = (uint8_t)alert_tuple->value->int32;
-    if (timer_index >= MAX_TIMERS || alert_index >= MAX_VIBE_STEPS) {
+    if (timer_index >= MAX_TIMERS || alert_index >= MAX_VIBE_STEPS ||
+        timer_index >= s_pending_config.timer_capacity || !s_pending_config.timers) {
       return;
     }
     VibeStep *step = NULL;
-    if (segment_index == FINISH_VIBE_SEGMENT) {
+    if (warn_tuple) {
+      uint8_t warn_index = (uint8_t)warn_tuple->value->int32;
+      TimerDefinition *timer = &s_pending_config.timers[timer_index];
+      if (warn_index >= MAX_WARN_ATS ||
+          segment_index >= timer->segment_count || !timer->segments) {
+        return;
+      }
+      TimerSegment *segment = &timer->segments[segment_index];
+      if (warn_index >= segment->warn_count) {
+        return;
+      }
+      SegmentWarning *warn = &segment->warns[warn_index];
+      if (alert_index >= warn->vibe_count) {
+        return;
+      }
+      step = &warn->vibes[alert_index];
+    } else if (segment_index == FINISH_VIBE_SEGMENT) {
       step = &s_pending_config.timers[timer_index].finish_vibes[alert_index];
     } else {
       TimerDefinition *timer = &s_pending_config.timers[timer_index];

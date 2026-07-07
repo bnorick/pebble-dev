@@ -10,6 +10,7 @@ Use `[vibration]` to set shared named levels and defaults.
 [vibration]
 pulse-delay = 200
 acknowledgment-alert-duration = 12
+warning = "mid-mid-mid"
 superlow = 60
 low = 100
 mid = 300
@@ -20,7 +21,10 @@ Supported keys:
 
 - `pulse-delay`
 - `acknowledgment-alert-duration`
+- `warning`
 - named levels such as `low`, `mid`, `high`, or custom names like `superlow`
+
+`warning` sets the default vibration used by `warn-at` entries that only specify a time. When omitted, Thymer uses `"mid-mid-mid"`.
 
 ## Simple string form
 

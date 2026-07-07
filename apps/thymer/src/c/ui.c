@@ -27,6 +27,8 @@ static AppTimer *s_config_notice_timer;
 
 static GBitmap *s_play_icon;
 static GBitmap *s_pause_icon;
+static GBitmap *s_stopwatch_play_icon;
+static GBitmap *s_stopwatch_pause_icon;
 static GBitmap *s_skip_icon;
 static GBitmap *s_hide_icon;
 static GBitmap *s_mute_icon;
@@ -71,6 +73,8 @@ static GBitmap *prv_up_action_icon(UpAction action) {
       return s_increment_icon;
     case UP_ACTION_DECREMENT:
       return s_decrement_icon;
+    case UP_ACTION_STOPWATCH:
+      return s_stopwatch_play_icon;
     case UP_ACTION_MUTE:
       return s_mute_icon;
     case UP_ACTION_NONE:
@@ -195,6 +199,10 @@ void ui_show_config_notice(void) {
   s_config_notice_timer = app_timer_register(1500, prv_config_notice_timer_callback, NULL);
 }
 
+bool ui_text_hidden(void) {
+  return s_text_hidden;
+}
+
 void ui_apply_text_hidden(bool hidden) {
   s_text_hidden = hidden;
   if (!s_title_layer || !s_hint_layer || !s_timer_layer || !s_status_layer || !s_detail_layer ||
@@ -212,6 +220,7 @@ void ui_apply_text_hidden(bool hidden) {
 
 bool ui_toggle_text_hidden(void) {
   ui_apply_text_hidden(!s_text_hidden);
+  timer_reschedule_refresh_timer();
   ui_refresh();
   return true;
 }
@@ -221,6 +230,7 @@ bool ui_reveal_text_if_hidden(void) {
     return false;
   }
   ui_apply_text_hidden(false);
+  timer_reschedule_refresh_timer();
   ui_refresh();
   return true;
 }
@@ -265,9 +275,14 @@ static void prv_refresh_button_hints(void) {
     return;
   }
 
+  bool stopwatch_mode = s_state.active
+    ? s_state.active_stopwatch
+    : timer_is_stopwatch_timer(timer_selected_timer());
   bitmap_layer_set_bitmap(s_select_icon_layer,
                           (s_state.active && s_state.running && !s_state.awaiting_ack &&
-                           !s_state.completed) ? s_pause_icon : s_play_icon);
+                           !s_state.completed)
+                            ? (stopwatch_mode ? s_stopwatch_pause_icon : s_pause_icon)
+                            : (stopwatch_mode ? s_stopwatch_play_icon : s_play_icon));
   bitmap_layer_set_bitmap(s_reset_icon_layer, s_reset_icon);
   bitmap_layer_set_bitmap(s_skip_icon_layer, s_skip_icon);
   bitmap_layer_set_bitmap(s_hide_icon_layer, s_hide_icon);
@@ -484,10 +499,14 @@ void ui_refresh(void) {
   if (s_state.active && active) {
     TimerSnapshot snap = timer_current_snapshot();
     const TimerSegment *segment = &active->segments[snap.phase_index];
-    uint64_t shown_remaining_ms = s_state.duration_adjustment_ms != 0
-      ? snap.total_remaining_ms
-      : snap.phase_remaining_ms;
-    util_format_duration(shown_remaining_ms, s_time_buffer, sizeof(s_time_buffer));
+    if (s_state.active_stopwatch) {
+      util_format_duration(snap.elapsed_ms, s_time_buffer, sizeof(s_time_buffer));
+    } else {
+      uint64_t shown_remaining_ms = s_state.duration_adjustment_ms != 0
+        ? snap.total_remaining_ms
+        : snap.phase_remaining_ms;
+      util_format_duration(shown_remaining_ms, s_time_buffer, sizeof(s_time_buffer));
+    }
 
     s_iteration_buffer[0] = '\0';
     if (active->repeat) {
@@ -504,6 +523,8 @@ void ui_refresh(void) {
     segment_hint = segment->hint;
     if (s_state.awaiting_ack) {
       state_text = "Press select";
+    } else if (snap.completed || s_state.completed) {
+      state_text = "Done";
     } else if (!s_state.running && !snap.completed && !s_state.completed) {
       state_text = "Paused";
     }
@@ -511,12 +532,19 @@ void ui_refresh(void) {
     uint8_t preview_segment = timer_allows_skip(selected)
       ? timer_clamp_segment_index(selected, s_selected_segment)
       : 0;
-    uint64_t shown_duration_ms = s_state.duration_adjustment_ms != 0
-      ? timer_adjusted_total_duration_ms(selected)
-      : selected->segments[preview_segment].duration_ms;
-    util_format_duration(shown_duration_ms, s_time_buffer, sizeof(s_time_buffer));
+    if (timer_is_true_stopwatch_timer(selected)) {
+      util_format_duration(0, s_time_buffer, sizeof(s_time_buffer));
+    } else {
+      uint64_t shown_duration_ms = s_state.duration_adjustment_ms != 0
+        ? timer_adjusted_total_duration_ms(selected)
+        : selected->segments[preview_segment].duration_ms;
+      util_format_duration(shown_duration_ms, s_time_buffer, sizeof(s_time_buffer));
+    }
     segment_name = selected->segments[preview_segment].name;
     segment_hint = selected->segments[preview_segment].hint;
+    if (s_state.completed) {
+      state_text = "Done";
+    }
     s_iteration_buffer[0] = '\0';
   }
 
@@ -628,6 +656,8 @@ static void prv_window_load(Window *window) {
 
   s_play_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PLAY);
   s_pause_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PAUSE);
+  s_stopwatch_play_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_STOPWATCH_PLAY);
+  s_stopwatch_pause_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_STOPWATCH_PAUSE);
   s_skip_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SKIP);
   s_hide_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_HIDE);
   s_mute_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_MUTE);
@@ -730,6 +760,8 @@ static void prv_window_unload(Window *window) {
   bitmap_layer_destroy(s_reset_icon_layer);
   gbitmap_destroy(s_play_icon);
   gbitmap_destroy(s_pause_icon);
+  gbitmap_destroy(s_stopwatch_play_icon);
+  gbitmap_destroy(s_stopwatch_pause_icon);
   gbitmap_destroy(s_skip_icon);
   gbitmap_destroy(s_hide_icon);
   gbitmap_destroy(s_mute_icon);

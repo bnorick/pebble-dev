@@ -8,6 +8,7 @@ Window *ui_get_window(void);
 void ui_refresh(void);
 void ui_refresh_background_layers(void);
 bool ui_skip_hint_visible(void);
+bool ui_text_hidden(void);
 void ui_apply_text_hidden(bool hidden);
 bool ui_toggle_text_hidden(void);
 bool ui_reveal_text_if_hidden(void);

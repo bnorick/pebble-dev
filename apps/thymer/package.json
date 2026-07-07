@@ -1,7 +1,7 @@
 {
   "name": "Thymer",
   "author": "bnorick",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "keywords": [
     "pebble-app"
   ],
@@ -13,7 +13,8 @@
     "check:timer-limit-sync": "python3 scripts/check_timer_limit_sync.py",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs --host 127.0.0.1"
+    "docs:preview": "vitepress preview docs --host 127.0.0.1",
+    "test:pkjs": "node --test tests/*.test.js"
   },
   "pebble": {
     "displayName": "thymer",
@@ -49,7 +50,14 @@
       "CFG_UP_ACTION",
       "CFG_UP_LONG_ACTION",
       "CFG_UI_FLAGS",
-      "CFG_ACK_DURATION"
+      "CFG_ACK_DURATION",
+      "CFG_HINT",
+      "CFG_UP_ACTION_TIME",
+      "CFG_UP_LONG_ACTION_TIME",
+      "CFG_SELECT_LONG_ACTION",
+      "CFG_SELECT_LONG_ACTION_TIME",
+      "CFG_WARN",
+      "CFG_WARN_TIME"
     ],
     "resources": {
       "media": [
@@ -68,6 +76,16 @@
           "type": "bitmap",
           "name": "IMAGE_PAUSE",
           "file": "pause.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_STOPWATCH_PLAY",
+          "file": "stopwatch-play.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_STOPWATCH_PAUSE",
+          "file": "stopwatch-pause.png"
         },
         {
           "type": "bitmap",

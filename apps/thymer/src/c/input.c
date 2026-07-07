@@ -7,11 +7,20 @@
 #include "timer.h"
 #include "thymer.h"
 #include "ui.h"
+#include "util.h"
 
 #if defined(PBL_TOUCH)
 static bool s_touch_tracking = false;
 static int16_t s_touch_start_x = 0;
 static int16_t s_touch_start_y = 0;
+static uint64_t s_hidden_last_tap_ms = 0;
+static int16_t s_hidden_last_tap_x = 0;
+static int16_t s_hidden_last_tap_y = 0;
+
+enum {
+  HIDDEN_DOUBLE_TAP_WINDOW_MS = 600,
+  HIDDEN_DOUBLE_TAP_DISTANCE_PX = 24,
+};
 #endif
 
 #if defined(DEBUG_TOUCH)
@@ -48,6 +57,42 @@ static const char *prv_zone_name(TriggerZone zone) {
 #define PRV_DEBUG_TOUCH_LOG(...) APP_LOG(APP_LOG_LEVEL_INFO, __VA_ARGS__)
 #else
 #define PRV_DEBUG_TOUCH_LOG(...) ((void)0)
+#endif
+
+#if defined(PBL_TOUCH)
+static void prv_clear_hidden_tap_state(void) {
+  s_hidden_last_tap_ms = 0;
+  s_hidden_last_tap_x = 0;
+  s_hidden_last_tap_y = 0;
+}
+
+static bool prv_hidden_double_tap_matches(int16_t x, int16_t y) {
+  if (s_hidden_last_tap_ms == 0) {
+    return false;
+  }
+
+  uint64_t now_ms = util_now_ms();
+  if (now_ms - s_hidden_last_tap_ms > HIDDEN_DOUBLE_TAP_WINDOW_MS) {
+    prv_clear_hidden_tap_state();
+    return false;
+  }
+
+  int16_t dx = x - s_hidden_last_tap_x;
+  int16_t dy = y - s_hidden_last_tap_y;
+  int16_t adx = dx < 0 ? -dx : dx;
+  int16_t ady = dy < 0 ? -dy : dy;
+  bool match = adx <= HIDDEN_DOUBLE_TAP_DISTANCE_PX && ady <= HIDDEN_DOUBLE_TAP_DISTANCE_PX;
+  if (!match) {
+    prv_clear_hidden_tap_state();
+  }
+  return match;
+}
+
+static void prv_record_hidden_tap(int16_t x, int16_t y) {
+  s_hidden_last_tap_ms = util_now_ms();
+  s_hidden_last_tap_x = x;
+  s_hidden_last_tap_y = y;
+}
 #endif
 
 static TriggerZone prv_zone_for_point(int16_t x, int16_t y, GRect bounds) {
@@ -141,6 +186,7 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
 
   if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
     s_state.duration_adjustment_ms = 0;
+    s_state.completed = false;
   }
   s_state.selected_timer = (uint8_t)next;
   s_selected_segment = 0;
@@ -152,7 +198,7 @@ static void prv_handle_touch_gesture(TriggerKind kind, TriggerZone from, Trigger
 
 #if defined(SCREENSHOT_SUPPORT)
 bool input_select_timer_for_trigger(TriggerKind kind, TriggerZone from, TriggerZone to) {
-  if (!prv_touch_selection_enabled()) {
+  if (ui_text_hidden() || !prv_touch_selection_enabled()) {
     return false;
   }
 
@@ -164,6 +210,7 @@ bool input_select_timer_for_trigger(TriggerKind kind, TriggerZone from, TriggerZ
 
   if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
     s_state.duration_adjustment_ms = 0;
+    s_state.completed = false;
   }
   s_state.selected_timer = (uint8_t)next;
   s_selected_segment = 0;
@@ -209,6 +256,23 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
         "touch up start=(%d,%d) end=(%d,%d) delta=(%d,%d) abs=(%d,%d) from=%s bounds=%dx%d",
         s_touch_start_x, s_touch_start_y, event->x, event->y, dx, dy, adx, ady,
         prv_zone_name(from), bounds.size.w, bounds.size.h);
+
+      if (ui_text_hidden()) {
+        if (adx < 18 && ady < 18) {
+          if (prv_hidden_double_tap_matches(event->x, event->y)) {
+            PRV_DEBUG_TOUCH_LOG("touch hidden double-tap reveal");
+            prv_clear_hidden_tap_state();
+            ui_reveal_text_if_hidden();
+          } else {
+            PRV_DEBUG_TOUCH_LOG("touch hidden single-tap pending");
+            prv_record_hidden_tap(event->x, event->y);
+          }
+        } else {
+          PRV_DEBUG_TOUCH_LOG("touch hidden gesture ignored");
+          prv_clear_hidden_tap_state();
+        }
+        break;
+      }
 
       if (adx < 18 && ady < 18) {
         if (s_state.active && s_state.awaiting_ack) {
@@ -264,6 +328,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
       ui_reveal_text_if_hidden();
       if (!s_state.active && s_state.selected_timer != (uint8_t)next) {
         s_state.duration_adjustment_ms = 0;
+        s_state.completed = false;
       }
       s_state.selected_timer = (uint8_t)next;
       s_selected_segment = 0;
@@ -301,6 +366,17 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *contex
   }
 }
 
+static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  bool revealed = ui_reveal_text_if_hidden();
+  UpAction action = timer_current_select_long_action();
+  if (revealed && action == UP_ACTION_HIDE) {
+    return;
+  }
+  (void)timer_handle_select_long_action();
+}
+
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   (void)recognizer;
   (void)context;
@@ -335,6 +411,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context)
 void input_click_config_provider(void *context) {
   (void)context;
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 700, prv_select_long_click_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
   window_long_click_subscribe(BUTTON_ID_UP, 700, prv_up_long_click_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
