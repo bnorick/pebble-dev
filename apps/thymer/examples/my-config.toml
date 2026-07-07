@@ -5,6 +5,8 @@ low = 100
 mid = 300
 high = 500
 
+### EXERCISE ###
+# timers for exercises I use regularly
 [timers.eyesight]
 trigger = { tap = "top" }
 repeat = 3
@@ -14,7 +16,8 @@ pattern = [
 ]
 on-finished = { vibrate = "mid-low-mid" }
 
-
+### KIDS ###
+# some timers I use with my kids
 [timers.sharing]
 trigger = { tap = "left" }
 repeat = true
@@ -35,7 +38,8 @@ warn-at = [
 ]
 on-finished = { vibrate="high-high-high" }
 
-
+### BREATHING ###
+# a couple breathing patterns I like
 [timers.478]
 name = "4-7-8"
 trigger = { tap = "right" }
@@ -47,7 +51,6 @@ pattern = [
   { name = "out",  time = "00:00:08", vibrate = "superlow-superlow-superlow" },
 ]
 
-
 [timers.square]
 trigger = { tap = "right" }
 repeat = true
@@ -58,7 +61,8 @@ pattern = [
   { name = "hold", time = "00:00:04", vibrate = "superlow" },
 ]
 
-
+### SIMPLE TIMERS / STOPWATCH ###
+# simple, likely useful timers for standard durations and a stopwatch
 [timers.1-min]
 trigger = { tap = "bottom" }
 on-press-up = { action = "increment", time="00:01:00" }
@@ -66,14 +70,12 @@ on-long-press-up = { action = "increment", time="00:00:30" }
 time = "00:01:00"
 on-finished = { vibrate = "high-high" }
 
-
 [timers.10-min]
 trigger = { tap = "bottom" }
 on-press-up = { action = "increment", time="00:05:00" }
 on-long-press-up = { action = "increment", time="00:01:00" }
 time = "00:10:00"
 on-finished = { vibrate = "high-high" }
-
 
 [timers.20-min]
 trigger = { tap = "bottom" }
@@ -86,7 +88,8 @@ on-finished = { vibrate = "high-high" }
 trigger = { tap = "bottom" }
 stopwatch = true
 
-# changes as I test various new config/functionality
+### TESTS ###
+# change as I test various new config/functionality
 [timers.test]
 repeat = true
 must-acknowledge = true
