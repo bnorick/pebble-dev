@@ -13,7 +13,8 @@
     "check:timer-limit-sync": "python3 scripts/check_timer_limit_sync.py",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs --host 127.0.0.1"
+    "docs:preview": "vitepress preview docs --host 127.0.0.1",
+    "test:pkjs": "node --test tests/*.test.js"
   },
   "pebble": {
     "displayName": "thymer",
