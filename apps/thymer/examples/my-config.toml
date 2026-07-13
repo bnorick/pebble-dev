@@ -1,16 +1,32 @@
 [vibration]
 superlow = 20
 
-### EXERCISE ###
-# timers for exercises I use regularly
-[timers.eyesight]
+### SIMPLE TIMERS / STOPWATCH ###
+# simple, likely useful timers for standard durations and a stopwatch
+[timers.1-min]
 trigger = { tap = "top" }
-repeat = 3
-pattern = [
-  { name = "far",  time = "00:00:15", vibrate = "high" },
-  { name = "near", time = "00:00:15", vibrate = "mid-mid" },
-]
-on-finished = { vibrate = "mid-low-mid" }
+on-press-up = { action = "increment", time="00:01:00" }
+on-long-press-up = { action = "increment", time="00:00:30" }
+time = "00:01:00"
+on-finished = { vibrate = "high-high" }
+
+[timers.10-min]
+trigger = { tap = "top" }
+on-press-up = { action = "increment", time="00:05:00" }
+on-long-press-up = { action = "increment", time="00:01:00" }
+time = "00:10:00"
+on-finished = { vibrate = "high-high" }
+
+[timers.20-min]
+trigger = { tap = "top" }
+on-press-up = { action = "increment", time="00:10:00" }
+on-long-press-up = { action = "increment", time="00:05:00" }
+time = "00:20:00"
+on-finished = { vibrate = "high-high" }
+
+[timers.stopwatch]
+trigger = { swipe = "down" }
+stopwatch = true
 
 ### KIDS ###
 # some timers I use with my kids
@@ -58,32 +74,16 @@ pattern = [
   { name = "hold", time = "00:00:04", vibrate = "superlow" },
 ]
 
-### SIMPLE TIMERS / STOPWATCH ###
-# simple, likely useful timers for standard durations and a stopwatch
-[timers.1-min]
+### EXERCISE ###
+# timers for exercises I use regularly
+[timers.eyesight]
 trigger = { tap = "bottom" }
-on-press-up = { action = "increment", time="00:01:00" }
-on-long-press-up = { action = "increment", time="00:00:30" }
-time = "00:01:00"
-on-finished = { vibrate = "high-high" }
-
-[timers.10-min]
-trigger = { tap = "bottom" }
-on-press-up = { action = "increment", time="00:05:00" }
-on-long-press-up = { action = "increment", time="00:01:00" }
-time = "00:10:00"
-on-finished = { vibrate = "high-high" }
-
-[timers.20-min]
-trigger = { tap = "bottom" }
-on-press-up = { action = "increment", time="00:10:00" }
-on-long-press-up = { action = "increment", time="00:05:00" }
-time = "00:20:00"
-on-finished = { vibrate = "high-high" }
-
-[timers.stopwatch]
-trigger = { swipe = "up" }
-stopwatch = true
+repeat = 3
+pattern = [
+  { name = "far",  time = "00:00:15", vibrate = "high" },
+  { name = "near", time = "00:00:15", vibrate = "mid-mid" },
+]
+on-finished = { vibrate = "mid-low-mid" }
 
 ### TESTS ###
 # change as I test various new config/functionality
@@ -96,4 +96,4 @@ pattern = [
   { name = "two",   time = "00:00:04", vibrate = "superlow-superlow" },
   { name = "three", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
 ]
-trigger = { swipe = "down" }
+trigger = { swipe = "up" }
