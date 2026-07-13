@@ -8,6 +8,10 @@ static void prv_init(void) {
   bool had_persisted_config = config_has_persisted_config();
   config_load();
   config_load_state();
+  if (!had_persisted_config) {
+    config_persist_config();
+    config_persist_state();
+  }
   timer_handle_launch_wakeup();
 
   Window *window = ui_create_window();
@@ -24,9 +28,6 @@ static void prv_init(void) {
   ui_refresh();
   timer_restore_ack_repeat_if_needed();
   timer_ensure_refresh_timer();
-  if (!had_persisted_config) {
-    config_send_request();
-  }
 }
 
 static void prv_deinit(void) {

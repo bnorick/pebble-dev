@@ -5,6 +5,8 @@
 #
 import os
 import os.path
+import subprocess
+import sys
 
 top = '.'
 out = 'build'
@@ -52,6 +54,9 @@ def configure(ctx):
 
 def build(ctx):
     ctx.load('pebble_sdk')
+
+    subprocess.check_call([sys.executable, 'scripts/generate_default_config_js.py'])
+    subprocess.check_call(['node', 'scripts/generate_default_config_c.js'])
 
     build_worker = os.path.exists('worker_src')
     binaries = []

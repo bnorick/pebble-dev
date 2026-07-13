@@ -13,3 +13,4 @@ void ui_apply_text_hidden(bool hidden);
 bool ui_toggle_text_hidden(void);
 bool ui_reveal_text_if_hidden(void);
 void ui_show_config_notice(void);
+void ui_refresh_config_progress(void);

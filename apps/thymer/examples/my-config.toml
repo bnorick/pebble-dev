@@ -1,9 +1,5 @@
 [vibration]
-pulse-delay = 200
 superlow = 20
-low = 100
-mid = 300
-high = 500
 
 ### EXERCISE ###
 # timers for exercises I use regularly
@@ -54,6 +50,7 @@ pattern = [
 [timers.square]
 trigger = { tap = "right" }
 repeat = true
+on-press-up = "hide"
 pattern = [
   { name = "in",   time = "00:00:04", vibrate = "superlow" },
   { name = "hold", time = "00:00:04", vibrate = "superlow" },
@@ -85,7 +82,7 @@ time = "00:20:00"
 on-finished = { vibrate = "high-high" }
 
 [timers.stopwatch]
-trigger = { tap = "bottom" }
+trigger = { swipe = "up" }
 stopwatch = true
 
 ### TESTS ###
@@ -99,4 +96,4 @@ pattern = [
   { name = "two",   time = "00:00:04", vibrate = "superlow-superlow" },
   { name = "three", time = "00:00:08", vibrate = "superlow-superlow-superlow" },
 ]
-trigger = { swipe = "up" }
+trigger = { swipe = "down" }

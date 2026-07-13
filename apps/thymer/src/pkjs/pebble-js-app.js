@@ -1,6 +1,7 @@
 const Clay = require("@rebble/clay");
 const buildClayConfig = require("./config");
 const clayTextarea = require("./clay-textarea");
+const defaultToml = require("./default-config.generated");
 const { MAX_TIMERS, parseTimerToml } = require("./timer-config");
 
 const STORAGE_KEY = "thymer.toml.v1";
@@ -35,6 +36,7 @@ const KEY_CFG_SELECT_LONG_ACTION = 10023;
 const KEY_CFG_SELECT_LONG_ACTION_TIME = 10024;
 const KEY_CFG_WARN = 10025;
 const KEY_CFG_WARN_TIME = 10026;
+const KEY_CFG_PROGRESS_TOTAL = 10027;
 
 const CFG_OP_BEGIN = 1;
 const CFG_OP_TIMER = 2;
@@ -51,7 +53,7 @@ const CONFIG_FLAG_BACKGROUND = 0x2;
 const CONFIG_FLAG_TIMER_ACCENT = 0x4;
 
 function loadToml() {
-  return localStorage.getItem(STORAGE_KEY) || "";
+  return localStorage.getItem(STORAGE_KEY) || defaultToml;
 }
 
 function saveToml(toml) {
@@ -91,6 +93,10 @@ function uiSettingsEqual(left, right) {
     left.timerAccentEnabled === right.timerAccentEnabled;
 }
 
+function timerConfigsEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function uiFlagsFromSettings(uiSettings) {
   let uiFlags = uiSettings.iconsEnabled ? CONFIG_FLAG_ICONS : 0;
   if (uiSettings.backgroundEnabled) {
@@ -123,6 +129,23 @@ function encodeUint64Bytes(value) {
   return bytes;
 }
 
+function countConfigMessages(config) {
+  let total = 2; // begin + commit
+  config.timers.forEach(function(timer) {
+    total += 1; // timer
+    total += timer.finishVibrate.length;
+    timer.pattern.forEach(function(segment) {
+      total += 1; // segment
+      total += segment.vibrate.length;
+      segment.warnAt.forEach(function(warnAt) {
+        total += 1; // warn
+        total += warnAt.vibrate.length;
+      });
+    });
+  });
+  return total;
+}
+
 function sendMessage(payload, onSuccess, onFailure) {
   Pebble.sendAppMessage(payload, onSuccess || function() {}, onFailure || function() {});
 }
@@ -136,10 +159,12 @@ function sendConfig(config) {
   }
   const uiSettings = loadUiSettings();
   const uiFlags = uiFlagsFromSettings(uiSettings);
+  const progressTotal = countConfigMessages(config);
   const payload = {};
   payload[KEY_CFG_OP] = CFG_OP_BEGIN;
   payload[KEY_CFG_TIMER] = timers.length;
   payload[KEY_CFG_UI_FLAGS] = uiFlags;
+  payload[KEY_CFG_PROGRESS_TOTAL] = progressTotal;
   sendMessage(payload, function() {
     sendTimerAt(timers, 0);
   });
@@ -325,10 +350,6 @@ function syncClaySettings() {
   });
 }
 
-Pebble.addEventListener("ready", function() {
-  sendStoredConfig();
-});
-
 Pebble.addEventListener("showConfiguration", function() {
   syncClaySettings();
   Pebble.openURL(clay.generateUrl());
@@ -348,18 +369,28 @@ Pebble.addEventListener("webviewclosed", function(event) {
       backgroundEnabled: !response.BackgroundEnabled || !!response.BackgroundEnabled.value,
       timerAccentEnabled: !response.TimerAccentEnabled || !!response.TimerAccentEnabled.value,
     };
-    const tomlChanged = toml !== previousToml;
+    const nextConfig = parseTimerToml(toml);
+    let previousConfig = null;
+    if (previousToml) {
+      try {
+        previousConfig = parseTimerToml(previousToml);
+      } catch (previousError) {
+        console.log(`Failed to parse stored config: ${previousError.message || previousError}`);
+      }
+    }
+    const effectiveTomlChanged = !previousConfig || !timerConfigsEqual(previousConfig, nextConfig);
     const uiChanged = !uiSettingsEqual(previousUiSettings, uiSettings);
-    if (!tomlChanged && !uiChanged) {
+    if (!effectiveTomlChanged && !uiChanged) {
+      saveToml(toml);
       return;
     }
     saveUiSettings(uiSettings);
-    if (!tomlChanged) {
+    saveToml(toml);
+    if (!effectiveTomlChanged) {
       sendUiConfig(uiSettings);
       return;
     }
-    saveToml(toml);
-    sendConfig(parseTimerToml(toml));
+    sendConfig(nextConfig);
   } catch (error) {
     Pebble.showSimpleNotificationOnPebble("Thymer config", error.message || String(error));
     sendConfigError(error.message || String(error));

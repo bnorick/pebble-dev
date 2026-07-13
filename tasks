@@ -29,8 +29,9 @@ logs ip:
     uv run pebble logs --phone {{ ip }}
 
 [no-cd]
-emulate app='' platform='emery':
-    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble install --emulator {{ platform }}; else uv run pebble install --emulator {{ platform }}; fi
+[arg("logs", long="logs", value=" --logs")]
+emulate app='' platform='emery' logs='':
+    if [ -n "{{ app }}" ]; then cd "{{ justfile_directory() }}/apps/{{ app }}" && uv run pebble install --emulator {{ platform }}{{logs}}; else uv run pebble install --emulator {{ platform }}{{logs}}; fi
 
 [no-cd]
 clean:

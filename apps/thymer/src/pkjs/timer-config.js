@@ -10,16 +10,16 @@ const ZONE_BOTTOM = 4;
 const ZONE_CENTER = 5;
 
 const VIBE_MID = 2;
-const DEFAULT_PULSE_DELAY = 100;
+const DEFAULT_PULSE_DELAY = 200;
 const DEFAULT_REPEAT_PATTERN_DELAY = 500;
 const DEFAULT_ACK_ALERT_DURATION = 12;
 const MAX_TIMERS = 100;
 const MAX_WARN_ATS = 4;
 const DEFAULT_WARNING_VIBRATE = "mid-mid-mid";
 const DEFAULT_VIBRATION_LEVELS = {
-  low: 75,
-  mid: 100,
-  high: 150,
+  low: 100,
+  mid: 300,
+  high: 500,
 };
 
 const UP_ACTION_NONE = 0;

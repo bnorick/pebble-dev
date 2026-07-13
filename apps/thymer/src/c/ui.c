@@ -8,6 +8,7 @@
 
 static Window *s_window;
 static BitmapLayer *s_background_layer;
+static Layer *s_config_progress_layer;
 static BitmapLayer *s_focus_panel_top_layer;
 static BitmapLayer *s_focus_panel_mid_layer;
 static BitmapLayer *s_focus_panel_bottom_layer;
@@ -57,7 +58,32 @@ enum {
   TITLE_STACK_GAP = 4,
   STACK_VERTICAL_GAP = 2,
   TIMER_STACK_GAP = 4,
+  CONFIG_PROGRESS_HEIGHT = 18,
 };
+
+static void prv_config_progress_update_proc(Layer *layer, GContext *ctx) {
+  if (!layer || !ctx) {
+    return;
+  }
+
+  bool visible = s_loading_config || s_waiting_for_initial_config;
+  if (!visible || s_config_progress_total == 0 || s_config_progress_received == 0) {
+    return;
+  }
+
+  GRect bounds = layer_get_bounds(layer);
+  uint32_t filled_width = ((uint32_t)bounds.size.w * s_config_progress_received) /
+                          s_config_progress_total;
+  if (filled_width > (uint32_t)bounds.size.w) {
+    filled_width = bounds.size.w;
+  }
+  if (filled_width <= 0) {
+    return;
+  }
+
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(0, 0, (int16_t)filled_width, bounds.size.h), 0, GCornerNone);
+}
 
 static bool prv_text_is_empty(const char *text) {
   return !text || text[0] == '\0';
@@ -92,6 +118,39 @@ static int16_t prv_measure_text_height(const char *text, GFont font, int16_t wid
   GSize size = graphics_text_layout_get_content_size(
     text, font, GRect(0, 0, width, max_height), GTextOverflowModeWordWrap, GTextAlignmentCenter);
   return size.h > max_height ? max_height : size.h;
+}
+
+static void prv_layout_centered_notice(void) {
+  if (!s_window || !s_title_layer || !s_hint_layer || !s_timer_layer || !s_status_layer ||
+      !s_detail_layer || !s_footer_layer) {
+    return;
+  }
+
+  Layer *window_layer = window_get_root_layer(s_window);
+  GRect bounds = layer_get_bounds(window_layer);
+  int16_t content_width = bounds.size.w - (STACK_SIDE_MARGIN * 2);
+  const char *status_text = text_layer_get_text(s_status_layer);
+  int16_t status_height = prv_measure_text_height(
+    status_text,
+    fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
+    content_width,
+    bounds.size.h
+  );
+  if (status_height <= 0) {
+    status_height = 28;
+  }
+  status_height += SEGMENT_DESCENDER_PADDING;
+  int16_t status_y = (bounds.size.h - status_height) / 2;
+  GRect status_frame = GRect(STACK_SIDE_MARGIN, status_y, content_width, status_height);
+
+  layer_set_frame(text_layer_get_layer(s_status_layer), status_frame);
+  layer_set_frame(text_layer_get_layer(s_timer_layer), status_frame);
+  layer_set_hidden(text_layer_get_layer(s_title_layer), true);
+  layer_set_hidden(text_layer_get_layer(s_hint_layer), true);
+  layer_set_hidden(text_layer_get_layer(s_timer_layer), true);
+  layer_set_hidden(text_layer_get_layer(s_status_layer), s_text_hidden);
+  layer_set_hidden(text_layer_get_layer(s_detail_layer), true);
+  layer_set_hidden(text_layer_get_layer(s_footer_layer), true);
 }
 
 static void prv_layout_focus_panel(void) {
@@ -164,12 +223,30 @@ static void prv_set_focus_panel_hidden(bool hidden) {
 
 void ui_refresh_background_layers(void) {
   if (s_background_layer) {
-    layer_set_hidden(bitmap_layer_get_layer(s_background_layer), !s_config.background_enabled);
+    bool hide_background = !s_loading_config && !s_show_config_notice && !s_config.background_enabled;
+    layer_set_hidden(bitmap_layer_get_layer(s_background_layer), hide_background);
   }
   if (s_focus_panel_top_layer && s_focus_panel_mid_layer && s_focus_panel_bottom_layer) {
-    bool hidden = !s_config.timer_accent_enabled || s_text_hidden;
+    bool hidden = (!s_loading_config && !s_show_config_notice && !s_config.timer_accent_enabled) ||
+                  s_text_hidden;
     prv_set_focus_panel_hidden(hidden);
   }
+  if (s_config_progress_layer) {
+    bool hidden = !(s_loading_config || s_waiting_for_initial_config) ||
+                  s_config_progress_total == 0 || s_config_progress_received == 0;
+    layer_set_hidden(s_config_progress_layer, hidden);
+    layer_mark_dirty(s_config_progress_layer);
+  }
+}
+
+void ui_refresh_config_progress(void) {
+  if (!s_config_progress_layer) {
+    return;
+  }
+  bool hidden = !(s_loading_config || s_waiting_for_initial_config) ||
+                s_config_progress_total == 0 || s_config_progress_received == 0;
+  layer_set_hidden(s_config_progress_layer, hidden);
+  layer_mark_dirty(s_config_progress_layer);
 }
 
 static void prv_cancel_config_notice_timer(void) {
@@ -266,7 +343,7 @@ static void prv_refresh_button_hints(void) {
     return;
   }
 
-  if (!s_config.icons_enabled) {
+  if (s_loading_config || s_show_config_notice || !s_config.icons_enabled) {
     layer_set_hidden(bitmap_layer_get_layer(s_select_icon_layer), true);
     layer_set_hidden(bitmap_layer_get_layer(s_reset_icon_layer), true);
     layer_set_hidden(bitmap_layer_get_layer(s_skip_icon_layer), true);
@@ -426,16 +503,15 @@ void ui_refresh(void) {
     return;
   }
 
-  if (s_waiting_for_initial_config) {
-    text_layer_set_text(s_title_layer, APP_NAME);
+  if (s_loading_config || s_waiting_for_initial_config) {
+    text_layer_set_text(s_title_layer, "");
     text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "");
-    text_layer_set_text(s_status_layer, "Loading...");
+    text_layer_set_text(s_status_layer, "Updating\nconfig...");
     text_layer_set_text(s_detail_layer, "");
     text_layer_set_text(s_footer_layer, "");
-    prv_layout_text_layers();
+    prv_layout_centered_notice();
     prv_layout_focus_panel();
-    prv_set_focus_panel_hidden(true);
     ui_refresh_background_layers();
     prv_refresh_button_hints();
     return;
@@ -445,15 +521,14 @@ void ui_refresh(void) {
   const TimerDefinition *active = s_state.active ? timer_active_timer() : selected;
 
   if (s_show_config_notice) {
-    text_layer_set_text(s_title_layer, APP_NAME);
+    text_layer_set_text(s_title_layer, "");
     text_layer_set_text(s_hint_layer, "");
     text_layer_set_text(s_timer_layer, "");
     text_layer_set_text(s_status_layer, "Updated");
     text_layer_set_text(s_detail_layer, "");
     text_layer_set_text(s_footer_layer, "");
-    prv_layout_text_layers();
+    prv_layout_centered_notice();
     prv_layout_focus_panel();
-    prv_set_focus_panel_hidden(true);
     ui_refresh_background_layers();
     prv_refresh_button_hints();
     return;
@@ -572,6 +647,12 @@ static void prv_window_load(Window *window) {
     bitmap_layer_set_compositing_mode(s_background_layer, GCompOpSet);
     layer_add_child(window_layer, bitmap_layer_get_layer(s_background_layer));
   }
+
+  s_config_progress_layer = layer_create(
+    GRect(0, bounds.size.h - CONFIG_PROGRESS_HEIGHT, bounds.size.w, CONFIG_PROGRESS_HEIGHT));
+  layer_set_update_proc(s_config_progress_layer, prv_config_progress_update_proc);
+  layer_set_hidden(s_config_progress_layer, true);
+  layer_add_child(window_layer, s_config_progress_layer);
 
   if (SHOW_TIMER_BACKGROUND) {
     s_focus_panel_top_bitmap = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_TIMER_BG_TOP);
@@ -722,6 +803,10 @@ static void prv_window_unload(Window *window) {
   if (s_background_layer) {
     bitmap_layer_destroy(s_background_layer);
     s_background_layer = NULL;
+  }
+  if (s_config_progress_layer) {
+    layer_destroy(s_config_progress_layer);
+    s_config_progress_layer = NULL;
   }
   if (s_focus_panel_top_layer) {
     bitmap_layer_destroy(s_focus_panel_top_layer);

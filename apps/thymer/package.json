@@ -1,7 +1,7 @@
 {
   "name": "Thymer",
   "author": "bnorick",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "keywords": [
     "pebble-app"
   ],
@@ -57,7 +57,8 @@
       "CFG_SELECT_LONG_ACTION",
       "CFG_SELECT_LONG_ACTION_TIME",
       "CFG_WARN",
-      "CFG_WARN_TIME"
+      "CFG_WARN_TIME",
+      "CFG_PROGRESS_TOTAL"
     ],
     "resources": {
       "media": [

@@ -1,0 +1,28 @@
+### SIMPLE TIMERS ###
+# simple, likely useful timers for standard durations
+[timers.1-min]
+trigger = { tap = "top" }
+on-press-up = { action = "increment", time="00:01:00" }
+on-long-press-up = { action = "increment", time="00:00:30" }
+time = "00:01:00"
+on-finished = { vibrate = "high-high" }
+
+[timers.10-min]
+trigger = { tap = "top" }
+on-press-up = { action = "increment", time="00:05:00" }
+on-long-press-up = { action = "increment", time="00:01:00" }
+time = "00:10:00"
+on-finished = { vibrate = "high-high" }
+
+[timers.20-min]
+trigger = { tap = "top" }
+on-press-up = { action = "increment", time="00:10:00" }
+on-long-press-up = { action = "increment", time="00:05:00" }
+time = "00:20:00"
+on-finished = { vibrate = "high-high" }
+
+### STOPWATCH ###
+# handy to have a stopwatch
+[timers.stopwatch]
+trigger = { swipe = "down" }
+stopwatch = true

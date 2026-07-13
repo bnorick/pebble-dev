@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "app_state.h"
+#include "default_config_generated.h"
 #include "input.h"
 #include "timer.h"
 #include "ui.h"
@@ -524,6 +525,9 @@ void config_deinit(void) {
 
 void config_default_config(void) {
   prv_reset_config(&s_config);
+  if (default_config_generated_build(&s_config)) {
+    return;
+  }
   prv_init_default_header(&s_config);
   if (!prv_ensure_timer_capacity(&s_config.timers, &s_config.timer_capacity, 1)) {
     return;
@@ -662,7 +666,10 @@ static void prv_reset_runtime_for_new_config(void) {
   s_state.version = CONFIG_VERSION;
 
   timer_reset_phase_tracking();
+  s_loading_config = false;
   s_show_config_notice = false;
+  s_config_progress_received = 0;
+  s_config_progress_total = 0;
   s_selected_segment = 0;
   s_text_hidden = false;
 }
@@ -709,10 +716,14 @@ static void prv_apply_config_from_pending(bool show_notice) {
   (void)prv_build_config_from_pending(&s_candidate_config);
 
   bool changed = !prv_configs_equal(&s_config, &s_candidate_config);
+  s_loading_config = false;
   s_waiting_for_initial_config = false;
   prv_reset_pending_config(&s_pending_config);
   if (!changed) {
+    s_config_progress_received = 0;
+    s_config_progress_total = 0;
     prv_reset_config(&s_candidate_config);
+    ui_refresh_config_progress();
     return;
   }
 
@@ -746,13 +757,37 @@ static void prv_apply_ui_flags(uint8_t ui_flags) {
   ui_refresh();
 }
 
+static void prv_abort_pending_config_request(const char *reason, int error_code) {
+  if (reason) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "%s: %d", reason, error_code);
+  }
+  s_loading_config = false;
+  s_waiting_for_initial_config = false;
+  s_config_progress_received = 0;
+  s_config_progress_total = 0;
+  prv_reset_pending_config(&s_pending_config);
+  ui_refresh_config_progress();
+  ui_refresh();
+}
+
 void config_send_request(void) {
   DictionaryIterator *iter = NULL;
-  if (app_message_outbox_begin(&iter) != APP_MSG_OK || !iter) {
+  AppMessageResult begin_result = app_message_outbox_begin(&iter);
+  if (begin_result != APP_MSG_OK || !iter) {
+    prv_abort_pending_config_request("Outbox begin failed", begin_result);
     return;
   }
+  APP_LOG(APP_LOG_LEVEL_INFO, "requesting config from phone");
+  s_loading_config = true;
+  s_config_progress_received = 0;
+  s_config_progress_total = 0;
   dict_write_uint8(iter, MESSAGE_KEY_REQUEST_CONFIG, 1);
-  app_message_outbox_send();
+  AppMessageResult send_result = app_message_outbox_send();
+  if (send_result != APP_MSG_OK) {
+    prv_abort_pending_config_request("Outbox send failed", send_result);
+    return;
+  }
+  ui_refresh();
 }
 
 void config_inbox_received(DictionaryIterator *iter, void *context) {
@@ -778,13 +813,26 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   int32_t op = op_tuple->value->int32;
+  if (op == CFG_OP_BEGIN || op == CFG_OP_TIMER || op == CFG_OP_SEGMENT || op == CFG_OP_VIBRATE ||
+      op == CFG_OP_COMMIT || op == CFG_OP_UI || op == CFG_OP_WARN) {
+    s_config_progress_received++;
+    if (s_loading_config || s_waiting_for_initial_config) {
+      ui_refresh_config_progress();
+    }
+  }
   if (op == CFG_OP_BEGIN) {
     prv_reset_pending_config(&s_pending_config);
+    s_loading_config = true;
+    s_config_progress_received = 1;
     s_pending_config.icons_enabled = true;
     s_pending_config.background_enabled = true;
     s_pending_config.timer_accent_enabled = true;
     Tuple *count_tuple = dict_find(iter, MESSAGE_KEY_CFG_TIMER);
     Tuple *ui_flags_tuple = dict_find(iter, MESSAGE_KEY_CFG_UI_FLAGS);
+    Tuple *progress_total_tuple = dict_find(iter, MESSAGE_KEY_CFG_PROGRESS_TOTAL);
+    s_config_progress_total = progress_total_tuple
+      ? (uint16_t)util_clamp_i32(progress_total_tuple->value->int32, 0, UINT16_MAX)
+      : 0;
     if (count_tuple) {
       s_pending_config.timer_count = (uint8_t)util_clamp_i32(count_tuple->value->int32,
                                                              0, MAX_TIMERS);
@@ -801,6 +849,8 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
       s_pending_config.timer_accent_enabled =
         (ui_flags_tuple->value->int32 & CONFIG_FLAG_TIMER_ACCENT) != 0;
     }
+    ui_refresh_config_progress();
+    ui_refresh();
     return;
   }
 
@@ -1037,21 +1087,26 @@ void config_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (op == CFG_OP_ERROR) {
+    s_loading_config = false;
     s_waiting_for_initial_config = false;
+    s_config_progress_received = 0;
+    s_config_progress_total = 0;
     Tuple *error_tuple = dict_find(iter, MESSAGE_KEY_CFG_ERROR);
     if (error_tuple && error_tuple->type == TUPLE_CSTRING) {
       APP_LOG(APP_LOG_LEVEL_ERROR, "Config error: %s", error_tuple->value->cstring);
     }
+    ui_refresh_config_progress();
+    ui_refresh();
   }
 }
 
 void config_inbox_dropped(AppMessageResult reason, void *context) {
   (void)context;
-  APP_LOG(APP_LOG_LEVEL_ERROR, "Inbox dropped: %d", reason);
+  prv_abort_pending_config_request("Inbox dropped", reason);
 }
 
 void config_outbox_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
   (void)iter;
   (void)context;
-  APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox failed: %d", reason);
+  prv_abort_pending_config_request("Outbox failed", reason);
 }
